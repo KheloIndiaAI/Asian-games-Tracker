@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789880443744,
+      "tag": "0000_phase1_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789881128999,
+      "tag": "0001_phase2_medals_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789881391972,
+      "tag": "0002_phase2_scheduler",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789883074906,
+      "tag": "0003_phase2_refinements_indexes_sweep",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789888359444,
+      "tag": "0004_live_job_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789918505820,
+      "tag": "0005_seed_voice_enabled_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789929247157,
+      "tag": "0006_add_schedule_items_short_id",
+      "breakpoints": true
+    }
+  ]
+}
