@@ -69,7 +69,7 @@ resource "aws_iam_instance_profile" "ec2" {
 # ---------------------------------------------------------------------------
 # GitHub Actions OIDC deploy role: upload release artifacts to S3 and trigger
 # the SSM Run Command deploy. Scoped to this one repo (var.github_repository)
-# and, within it, only branch "main" and manual workflow_dispatch — see the
+# and, within it, only var.deploy_branch and manual workflow_dispatch — see the
 # StringLike condition below.
 # ---------------------------------------------------------------------------
 
@@ -103,7 +103,7 @@ data "aws_iam_policy_document" "github_assume" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${var.github_repository}:ref:refs/heads/main",
+        "repo:${var.github_repository}:ref:refs/heads/${var.deploy_branch}",
         "repo:${var.github_repository}:workflow_dispatch",
       ]
     }

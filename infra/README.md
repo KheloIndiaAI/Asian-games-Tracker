@@ -60,7 +60,7 @@ Run Command.
    - `S3_ARTIFACT_BUCKET` = `artifacts_bucket`
    - `EC2_INSTANCE_ID` = `web_instance_id`
 
-7. Push to `main` (or run the `Deploy to AWS` workflow manually). The first
+7. Push to `dev` (or run the `Deploy to AWS` workflow manually). The first
    run builds, uploads to S3, and runs `infra/scripts/deploy.sh` on the
    instance over SSM — which installs deps, renders `/etc/cheer4bharat/env`
    from SSM, runs `drizzle-kit migrate` against the fresh RDS instance, and

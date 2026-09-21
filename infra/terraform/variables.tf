@@ -69,3 +69,9 @@ variable "github_repository" {
   description = "GitHub repo allowed to assume the deploy role via OIDC, as \"owner/repo\"."
   type        = string
 }
+
+variable "deploy_branch" {
+  description = "Branch that triggers a deploy (must match .github/workflows/deploy.yml's push trigger)."
+  type        = string
+  default     = "dev"
+}
