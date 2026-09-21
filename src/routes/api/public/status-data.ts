@@ -1,101 +1,101 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { statusKeyIsValid } from "@/lib/status-auth.server";
-import { db } from "@/lib/db.server";
-import { fetchLog, indiaMedals, indiaResults, medalStandings, scheduleItems, sports } from "../../../../drizzle/schema";
+import { getSql } from "@/lib/pg.server";
 
 function istDate(offset = 0) { return new Date(Date.now() + 19800000 + offset * 86400000).toISOString().slice(0, 10); }
-
-async function countRows(table: typeof scheduleItems | typeof indiaResults | typeof indiaMedals, where?: any) {
-  const rows = await db.select({ count: sql<number>`count(*)::int` }).from(table as any).where(where);
-  return rows[0]?.count ?? 0;
-}
 
 export const Route = createFileRoute("/api/public/status-data")({
   server: { handlers: { GET: async ({ request }) => {
     const key = new URL(request.url).searchParams.get("key") ?? "";
     if (!(await statusKeyIsValid(key))) return new Response("Not found", { status: 404 });
+    const sql = getSql();
     const today = istDate(), tomorrow = istDate(1), now = Date.now();
+    const from = new Date(now - 21600000).toISOString();
+    const to = new Date(now + 900000).toISOString();
 
     const [
-      itemsCount, indiaCount, resultsCount, medalsCount,
-      logs, upcoming, indiaResultRows, medalRows, standing, live,
+      itemsCountRows, indiaCountRows, resultsCountRows, medalsCountRows,
+      logs, upcoming, indiaResultRows, medalRows, standingRows, live,
       entered, watchRows, liveRows, lastRuns, sportRows,
     ] = await Promise.all([
-      countRows(scheduleItems),
-      countRows(scheduleItems, eq(scheduleItems.hasIndia, true)),
-      countRows(indiaResults),
-      countRows(indiaMedals),
-      db.select().from(fetchLog).orderBy(desc(fetchLog.id)).limit(10),
-      db.select({
-        sportCode: scheduleItems.sportCode, resCode: scheduleItems.resCode, eventName: scheduleItems.eventName,
-        phaseName: scheduleItems.phaseName, startIst: scheduleItems.startIst, dateIst: scheduleItems.dateIst,
-        status: scheduleItems.status, statusDesc: scheduleItems.statusDesc, orgs: scheduleItems.orgs, isH2h: scheduleItems.isH2h,
-      }).from(scheduleItems)
-        .where(and(eq(scheduleItems.hasIndia, true), inArray(scheduleItems.dateIst, [today, tomorrow])))
-        .orderBy(asc(scheduleItems.startIst)),
-      db.select({
-        sportCode: indiaResults.sportCode, resCode: indiaResults.resCode,
-        opponentName: indiaResults.opponentName, spokenSummaryEn: indiaResults.spokenSummaryEn,
-      }).from(indiaResults),
-      db.select().from(indiaMedals).orderBy(desc(indiaMedals.wonAt)).limit(25),
-      db.select().from(medalStandings).where(eq(medalStandings.orgCode, "IND")).limit(1),
-      db.select({
-        sportCode: scheduleItems.sportCode, resCode: scheduleItems.resCode, eventName: scheduleItems.eventName,
-        phaseName: scheduleItems.phaseName, startIst: scheduleItems.startIst, status: scheduleItems.status, statusDesc: scheduleItems.statusDesc,
-      }).from(scheduleItems)
-        .where(and(eq(scheduleItems.hasIndia, true), or(eq(scheduleItems.isLive, true), eq(scheduleItems.status, "RUNNING"))))
-        .orderBy(asc(scheduleItems.startIst)),
-      db.select({ sportCode: scheduleItems.sportCode, dateIst: scheduleItems.dateIst }).from(scheduleItems)
-        .where(and(eq(scheduleItems.indiaEntered, true), eq(scheduleItems.hasIndia, false), inArray(scheduleItems.dateIst, [today, tomorrow]))),
-      db.select({
-        sportCode: scheduleItems.sportCode, eventName: scheduleItems.eventName, phaseName: scheduleItems.phaseName,
-        status: scheduleItems.status, statusDesc: scheduleItems.statusDesc, isLive: scheduleItems.isLive,
-        startTime: scheduleItems.startTime, indiaResultFetchedAt: scheduleItems.indiaResultFetchedAt, updatedAt: scheduleItems.updatedAt,
-      }).from(scheduleItems)
-        .where(and(
-          eq(scheduleItems.hasIndia, true),
-          gte(scheduleItems.startTime, new Date(now - 21600000)),
-          lte(scheduleItems.startTime, new Date(now + 900000)),
-        )),
-      db.select({
-        sportCode: scheduleItems.sportCode, eventName: scheduleItems.eventName, phaseName: scheduleItems.phaseName,
-        status: scheduleItems.status, statusDesc: scheduleItems.statusDesc, isLive: scheduleItems.isLive,
-        startTime: scheduleItems.startTime, indiaResultFetchedAt: scheduleItems.indiaResultFetchedAt, updatedAt: scheduleItems.updatedAt,
-      }).from(scheduleItems).where(and(eq(scheduleItems.hasIndia, true), eq(scheduleItems.isLive, true))),
-      db.select({ mode: fetchLog.mode, startedAt: fetchLog.startedAt, ok: fetchLog.ok }).from(fetchLog)
-        .where(and(inArray(fetchLog.mode, ["india_now", "india_today"]), eq(fetchLog.ok, true)))
-        .orderBy(desc(fetchLog.id)).limit(40),
-      db.select({ code: sports.code, name: sports.name }).from(sports),
-    ]);
+      sql`SELECT count(*)::int AS count FROM schedule_items`,
+      sql`SELECT count(*)::int AS count FROM schedule_items WHERE has_india = true`,
+      sql`SELECT count(*)::int AS count FROM india_results`,
+      sql`SELECT count(*)::int AS count FROM india_medals`,
+      sql`SELECT * FROM fetch_log ORDER BY id DESC LIMIT 10`,
+      sql`
+        SELECT sport_code, res_code, event_name, phase_name, start_ist, date_ist, status, status_desc, orgs, is_h2h
+        FROM schedule_items
+        WHERE has_india = true AND date_ist IN (${today}, ${tomorrow})
+        ORDER BY start_ist ASC
+      `,
+      sql`SELECT sport_code, res_code, opponent_name, spoken_summary_en FROM india_results`,
+      sql`SELECT * FROM india_medals ORDER BY won_at DESC LIMIT 25`,
+      sql`SELECT * FROM medal_standings WHERE org_code = 'IND' LIMIT 1`,
+      sql`
+        SELECT sport_code, res_code, event_name, phase_name, start_ist, status, status_desc
+        FROM schedule_items
+        WHERE has_india = true AND (is_live = true OR status = 'RUNNING')
+        ORDER BY start_ist ASC
+      `,
+      sql`
+        SELECT sport_code, date_ist FROM schedule_items
+        WHERE india_entered = true AND has_india = false AND date_ist IN (${today}, ${tomorrow})
+      `,
+      sql`
+        SELECT sport_code, event_name, phase_name, status, status_desc, is_live, start_time, india_result_fetched_at, updated_at
+        FROM schedule_items
+        WHERE has_india = true AND start_time >= ${from} AND start_time <= ${to}
+      `,
+      sql`
+        SELECT sport_code, event_name, phase_name, status, status_desc, is_live, start_time, india_result_fetched_at, updated_at
+        FROM schedule_items
+        WHERE has_india = true AND is_live = true
+      `,
+      sql`
+        SELECT mode, started_at, ok FROM fetch_log
+        WHERE mode IN ('india_now', 'india_today') AND ok = true
+        ORDER BY id DESC LIMIT 40
+      `,
+      sql`SELECT code, name FROM sports`,
+    ]) as [
+      any[], any[], any[], any[],
+      any[], any[], any[], any[], any[], any[],
+      any[], any[], any[], any[], any[],
+    ];
 
-    const sportName = new Map(sportRows.map((s) => [s.code, s.name ?? s.code]));
-    const resMap = new Map(indiaResultRows.map((r) => [`${r.sportCode}|${r.resCode}`, r]));
+    const itemsCount = itemsCountRows[0]?.count ?? 0;
+    const indiaCount = indiaCountRows[0]?.count ?? 0;
+    const resultsCount = resultsCountRows[0]?.count ?? 0;
+    const medalsCount = medalsCountRows[0]?.count ?? 0;
+
+    const sportName = new Map(sportRows.map((s: any) => [s.code, s.name ?? s.code]));
+    const resMap = new Map(indiaResultRows.map((r: any) => [`${r.sport_code}|${r.res_code}`, r]));
     const watchMap = new Map<string, any>();
-    for (const r of watchRows) if (String(r.status ?? "").toUpperCase() !== "OFFICIAL") watchMap.set(`${r.sportCode}|${r.eventName}|${r.startTime}`, r);
-    for (const r of liveRows) watchMap.set(`${r.sportCode}|${r.eventName}|${r.startTime}`, r);
+    for (const r of watchRows) if (String(r.status ?? "").toUpperCase() !== "OFFICIAL") watchMap.set(`${r.sport_code}|${r.event_name}|${r.start_time}`, r);
+    for (const r of liveRows) watchMap.set(`${r.sport_code}|${r.event_name}|${r.start_time}`, r);
     const enteredCounts: Record<string, number> = { [today]: 0, [tomorrow]: 0 };
-    for (const e of entered) if (e.dateIst) enteredCounts[e.dateIst] = (enteredCounts[e.dateIst] ?? 0) + 1;
+    for (const e of entered) if (e.date_ist) enteredCounts[e.date_ist] = (enteredCounts[e.date_ist] ?? 0) + 1;
 
     const data = {
-      watch: [...watchMap.values()].map((r) => ({ ...r, age: Math.round((now - Date.parse(r.indiaResultFetchedAt ?? r.updatedAt)) / 60000) })),
+      watch: [...watchMap.values()].map((r) => ({ ...r, age: Math.round((now - Date.parse(r.india_result_fetched_at ?? r.updated_at)) / 60000) })),
       lastRun: {
-        india_now: lastRuns.find((l) => l.mode === "india_now")?.startedAt ?? null,
-        india_today: lastRuns.find((l) => l.mode === "india_today")?.startedAt ?? null,
+        india_now: lastRuns.find((l: any) => l.mode === "india_now")?.started_at ?? null,
+        india_today: lastRuns.find((l: any) => l.mode === "india_today")?.started_at ?? null,
       },
       counts: { items: itemsCount, india: indiaCount, results: resultsCount, medals: medalsCount },
       logs,
-      medalRows: medalRows.map((m) => ({ ...m, sport: sportName.get(m.sportCode) ?? m.sportCode })),
-      standing: standing[0] ?? null,
-      live: live.map((r) => ({ ...r, sport: sportName.get(r.sportCode) ?? r.sportCode, summary: resMap.get(`${r.sportCode}|${r.resCode}`)?.spokenSummaryEn ?? "" })),
+      medalRows: medalRows.map((m: any) => ({ ...m, sport: sportName.get(m.sport_code) ?? m.sport_code })),
+      standing: standingRows[0] ?? null,
+      live: live.map((r: any) => ({ ...r, sport: sportName.get(r.sport_code) ?? r.sport_code, summary: resMap.get(`${r.sport_code}|${r.res_code}`)?.spoken_summary_en ?? "" })),
       enteredCounts,
-      rows: upcoming.map((r) => {
-        const res = resMap.get(`${r.sportCode}|${r.resCode}`);
+      rows: upcoming.map((r: any) => {
+        const res = resMap.get(`${r.sport_code}|${r.res_code}`);
         return {
           ...r,
-          sport: sportName.get(r.sportCode) ?? r.sportCode,
-          opponent: res?.opponentName ?? (r.orgs ?? []).filter((o) => o !== "IND").slice(0, 2).join(", "),
-          summary: res?.spokenSummaryEn ?? "",
+          sport: sportName.get(r.sport_code) ?? r.sport_code,
+          opponent: res?.opponent_name ?? (r.orgs ?? []).filter((o: string) => o !== "IND").slice(0, 2).join(", "),
+          summary: res?.spoken_summary_en ?? "",
         };
       }),
       today, tomorrow,

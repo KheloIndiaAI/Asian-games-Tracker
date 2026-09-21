@@ -11,6 +11,12 @@ terraform {
       version = "~> 3.6"
     }
   }
+
+  # State holds the RDS master password (rds.tf) — must be remote and
+  # encrypted, never local. Bucket/table come from infra/terraform-state/
+  # (apply that first). Left as a partial ("-backend-config") block so no
+  # account-specific bucket name is hardcoded here; see infra/README.md.
+  backend "s3" {}
 }
 
 provider "aws" {

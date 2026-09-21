@@ -66,12 +66,48 @@ resource "aws_cloudwatch_metric_alarm" "rds_connections" {
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
-# Ingest freshness: the worker's fetch_log rows drive this via a custom
-# metric it should publish (put_metric_data) — not wired up automatically
-# here since the app doesn't yet call CloudWatch PutMetricData. Track it as
-# a manual follow-up: either have the worker publish a "MinutesSinceLastRun"
-# metric per mode, or query /api/public/status-data from a scheduled Lambda
-# / canary and alarm on staleness there.
+# Ingest freshness: src/worker/index.ts's publishFreshness() job publishes
+# Cheer4Bharat/Ingest MinutesSinceLastOk (dimension Mode) every 5 minutes.
+# "cycle" runs every 5 minutes itself, so > 15 stale minutes means at least
+# two runs in a row failed or the worker died — treat missing data as
+# breaching too, since a dead worker stops publishing the metric at all.
+resource "aws_cloudwatch_metric_alarm" "ingest_freshness" {
+  alarm_name          = "${var.project}-ingest-stale"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "MinutesSinceLastOk"
+  namespace           = "Cheer4Bharat/Ingest"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 15
+  dimensions          = { Mode = "cycle" }
+  treat_missing_data  = "breaching"
+  alarm_description   = "No successful 'cycle' ingest run in 15+ minutes"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# CloudFront metrics only exist in us-east-1 regardless of where the
+# distribution actually serves from.
+resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx" {
+  count               = var.domain_name == "" ? 0 : 1
+  provider            = aws.us_east_1
+  alarm_name          = "${var.project}-cloudfront-5xx"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "5xxErrorRate"
+  namespace           = "AWS/CloudFront"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 5 # percent
+  dimensions = {
+    DistributionId = aws_cloudfront_distribution.site[0].id
+    Region         = "Global"
+  }
+  alarm_description = "CloudFront 5xx error rate above 5% for 10 minutes"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+}
 
 resource "aws_budgets_budget" "monthly" {
   name         = "${var.project}-monthly"

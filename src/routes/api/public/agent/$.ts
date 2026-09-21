@@ -10,7 +10,7 @@ import {
   whenPhrase,
 } from "@/server/feed";
 import { getSql } from "@/lib/pg.server";
-import { getAgentKey } from "@/lib/secrets.server";
+import { timingSafeCompare, tryGetAgentKey } from "@/lib/secrets.server";
 
 type Sql = ReturnType<typeof getSql>;
 
@@ -202,13 +202,18 @@ type Env = {
   param: (name: string) => string | null;
 };
 
-// Column list shared by every `schedule_items` read below. `start_time` and
-// `date_ist` are timestamptz/date columns; they are wrapped in `to_json(...)`
-// so postgres.js hands back the same ISO-8601 string Postgres's own JSON
-// serialization produces (matching this API's existing JSON contract),
-// instead of a JS Date object.
+// Column list shared by every `schedule_items` read below. date/timestamptz
+// columns come back as plain strings already — see the `types` overrides in
+// src/lib/pg.server.ts — so no to_json() wrapping is needed here. (An
+// earlier version of this file did its own to_json(start_time) AS
+// start_time per query, which not only duplicated that fix but actively
+// broke it: aliasing an output column to the same name as the source
+// column makes ORDER BY start_time resolve to the json-typed alias instead
+// of the real timestamptz column, and json has no ordering operator —
+// "could not identify an ordering operator for type json" on every query
+// that both selected and sorted by the same time column.)
 const ITEM_SELECT =
-  "sport_code,res_code,event_code,event_name,phase_name,start_ist,to_json(start_time) as start_time,to_json(date_ist) as date_ist,status,is_live,is_h2h,medal_flag,venue_name,home,away,raw";
+  "sport_code,res_code,event_code,event_name,phase_name,start_ist,start_time,date_ist,status,is_live,is_h2h,medal_flag,venue_name,home,away,raw";
 
 function sideMembers(side: any): string[] {
   if (!side || typeof side !== "object") return [];
@@ -424,7 +429,7 @@ async function indiaResults(env: Env, forcedDate?: string) {
     : sql`AND start_time >= ${new Date(Date.now() - 24 * 3600 * 1000).toISOString()}`;
 
   const data: any[] = await sql`
-    SELECT sport_code,res_code,athlete_or_team,spoken_name,outcome,rank,medal,status,to_json(start_time) as start_time,spoken_summary_en
+    SELECT sport_code,res_code,athlete_or_team,spoken_name,outcome,rank,medal,status,start_time,spoken_summary_en
     FROM india_results
     WHERE status IN ${sql(FINISHED)}
     ${sportCodes ? sql`AND sport_code IN ${sql(sportCodes)}` : sql``}
@@ -535,7 +540,7 @@ async function medalTally(env: Env) {
 
   if (sportFilter?.length) {
     const rows: any[] = await sql`
-      SELECT sport_code,medal,spoken_summary_en,to_json(won_at) as won_at
+      SELECT sport_code,medal,spoken_summary_en,won_at
       FROM india_medals
       WHERE sport_code IN ${sql(sportFilter.map((s) => s.code))}
       ORDER BY won_at DESC
@@ -559,11 +564,11 @@ async function medalTally(env: Env) {
 
   const [stRows, latest] = await Promise.all([
     sql`
-      SELECT org_code,org_name,rank,gold,silver,bronze,total,to_json(updated_at) as updated_at
+      SELECT org_code,org_name,rank,gold,silver,bronze,total,updated_at
       FROM medal_standings WHERE org_code = ${country} LIMIT 1
     `,
     sql`
-      SELECT medal,spoken_summary_en,to_json(won_at) as won_at
+      SELECT medal,spoken_summary_en,won_at
       FROM india_medals
       ORDER BY won_at DESC
       LIMIT 3
@@ -649,11 +654,11 @@ async function athlete(env: Env) {
 
   const [entries, results]: [any[], any[]] = await Promise.all([
     sql`
-      SELECT sport_code,reg,event_code,name,spoken_name,gender,type,event_name,is_member,sport_name,to_json(updated_at) as updated_at
+      SELECT sport_code,reg,event_code,name,spoken_name,gender,type,event_name,is_member,sport_name,updated_at
       FROM india_entries LIMIT 2000
     `,
     sql`
-      SELECT sport_code,athlete_or_team,spoken_name,spoken_summary_en,to_json(start_time) as start_time,status
+      SELECT sport_code,athlete_or_team,spoken_name,spoken_summary_en,start_time,status
       FROM india_results
       ORDER BY start_time DESC
       LIMIT 500
@@ -707,20 +712,10 @@ const CACHE_MS = 60_000;
 let asOfCache: Cached<string | null> | null = null;
 let sportsCache: Cached<{ code: string; name: string }[]> | null = null;
 
-/** Reads the agent auth key from the environment, returning null (never
- *  throwing) so a missing key simply results in an unauthorized response. */
-function agentKey(): string | null {
-  try {
-    return getAgentKey();
-  } catch {
-    return null;
-  }
-}
-
 async function cachedAsOf(sql: Sql) {
   if (asOfCache && Date.now() - asOfCache.at < CACHE_MS) return asOfCache.value;
   const data: any[] = await sql`
-    SELECT to_json(finished_at) as finished_at
+    SELECT finished_at
     FROM fetch_log
     WHERE ok = true
     ORDER BY id DESC
@@ -764,10 +759,13 @@ async function handle(request: Request, splat: string) {
   };
   const sql = getSql();
 
+  // Header/Bearer only — a key in the query string ends up in access logs,
+  // browser history and Referer headers, so it's not accepted here even
+  // though the Sarvam tool config was written to send it that way; confirm
+  // that config sends `x-api-key` or `Authorization: Bearer …` instead.
   const bearer = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
-  const supplied = request.headers.get("x-api-key") || param("key") || bearer || "";
-  const expected = agentKey();
-  if (!expected || supplied !== expected) {
+  const supplied = request.headers.get("x-api-key") || bearer || "";
+  if (!timingSafeCompare(supplied, tryGetAgentKey())) {
     return Response.json(
       { ok: false, error: "unauthorized" },
       { status: 401, headers: JSON_HEADERS },

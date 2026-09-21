@@ -27,6 +27,13 @@ export const Route = createFileRoute("/api/public/voice-config")({
             { headers: JSON_HEADERS },
           );
         }
+        // apiKey is returned to any caller — CORS headers don't protect it
+        // (they only govern browser JS, not a direct/server-side fetch), so
+        // the only real guard is that this must be a Sarvam *embed* key
+        // that Sarvam itself restricts to our domain and rate-limits.
+        // VERIFY THIS in the Sarvam dashboard before flipping VOICE_ENABLED
+        // to true — if it isn't origin-restricted there, switch to minting
+        // short-lived tokens server-side instead of handing out this key.
         return Response.json(
           {
             configured: true,

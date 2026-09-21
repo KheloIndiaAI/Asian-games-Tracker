@@ -5,10 +5,12 @@ import type { Tz } from "./format";
 const tzParam = (tz: Tz) => (tz === "JST" ? "jst" : "ist");
 const requestOrigin = createIsomorphicFn()
   .client(() => "")
-  .server(async () => {
-    const { getRequestUrl } = await import("@tanstack/react-start/server");
-    return getRequestUrl().origin;
-  });
+  // SSR self-fetch: the server calls its own API routes while rendering.
+  // Using the request's Host would resolve to the public domain behind
+  // CloudFront — a real network round-trip out and back in, which is slow
+  // and depends on DNS/CloudFront being reachable at all. Go straight to
+  // the process's own port on localhost instead.
+  .server(() => `http://127.0.0.1:${process.env["PORT"] ?? 3000}`);
 
 export type AppItem = {
   sport_code: string;

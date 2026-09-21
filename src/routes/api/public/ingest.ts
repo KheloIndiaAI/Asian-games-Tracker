@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/pg.server";
-import { getIngestKey } from "@/lib/secrets.server";
+import { timingSafeCompare, tryGetIngestKey } from "@/lib/secrets.server";
 import { runIngestMode } from "@/server/ingest-engine";
 
 const JSON_HEADERS = {
@@ -14,9 +14,8 @@ async function handle(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode") || "cycle";
 
-  const secret = getIngestKey();
-  const provided = request.headers.get("x-ingest-key");
-  if (!secret || provided !== secret) {
+  const provided = request.headers.get("x-ingest-key") ?? "";
+  if (!timingSafeCompare(provided, tryGetIngestKey())) {
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401, headers: JSON_HEADERS });
   }
 

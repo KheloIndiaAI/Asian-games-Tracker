@@ -63,7 +63,8 @@ jobs:
             infra \
             package.json \
             package-lock.json \
-            drizzle.config.ts
+            drizzle.config.ts \
+            tsconfig.json
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

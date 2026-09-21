@@ -37,12 +37,6 @@ data "aws_iam_policy_document" "ec2_app" {
   }
 
   statement {
-    sid       = "ReadRdsSecret"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_db_instance.main.master_user_secret[0].secret_arn]
-  }
-
-  statement {
     sid       = "ReadArtifacts"
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.artifacts.arn}/*"]

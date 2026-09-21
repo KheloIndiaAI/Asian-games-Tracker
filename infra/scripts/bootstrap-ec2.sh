@@ -22,26 +22,34 @@ mkdir -p "$APP_DIR/releases" "$APP_DIR/bin" /etc/cheer4bharat
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
 chown "$SERVICE_USER:$SERVICE_USER" /etc/cheer4bharat
 
-echo "==> Installing CloudWatch agent"
-dnf install -y amazon-cloudwatch-agent || true
+# On first boot this script runs from a flat directory synced from S3
+# (infra/terraform uploads infra/{systemd,scripts,cloudwatch-agent}/* side
+# by side under s3://<artifacts-bucket>/bootstrap/ — see bootstrap.tf), so
+# sibling files sit right next to this script, not under ../<dir>. A later
+# manual re-run from a full repo checkout also works, since each lookup
+# falls back to the real relative path when the flat layout isn't there.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+sibling_or() { [ -f "$SCRIPT_DIR/$(basename "$1")" ] && echo "$SCRIPT_DIR/$(basename "$1")" || echo "$SCRIPT_DIR/$1"; }
 
 echo "==> Installing systemd units"
-# On first boot this script runs from a flat directory synced from S3
-# (infra/terraform uploads infra/systemd/*.service and infra/scripts/*.sh
-# side by side under s3://<artifacts-bucket>/bootstrap/ — see bootstrap.tf),
-# so unit files sit right next to this script, not under ../systemd. A later
-# manual re-run from a full repo checkout also works, since it falls back to
-# ../systemd when the flat layout isn't there.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/cheer4bharat-web.service" ]; then
-  UNIT_DIR="$SCRIPT_DIR"
-else
-  UNIT_DIR="$SCRIPT_DIR/../systemd"
-fi
-cp "$UNIT_DIR/cheer4bharat-web.service" /etc/systemd/system/
-cp "$UNIT_DIR/cheer4bharat-worker.service" /etc/systemd/system/
+cp "$(sibling_or ../systemd/cheer4bharat-web.service)" /etc/systemd/system/
+cp "$(sibling_or ../systemd/cheer4bharat-worker.service)" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable cheer4bharat-web.service cheer4bharat-worker.service
+
+echo "==> Routing each unit's journal entries to its own log file"
+touch /var/log/cheer4bharat-web.log /var/log/cheer4bharat-worker.log
+chmod 644 /var/log/cheer4bharat-web.log /var/log/cheer4bharat-worker.log
+cp "$(sibling_or ../cloudwatch-agent/rsyslog-cheer4bharat.conf)" /etc/rsyslog.d/cheer4bharat.conf
+systemctl restart rsyslog
+
+echo "==> Installing and starting the CloudWatch agent"
+dnf install -y amazon-cloudwatch-agent
+mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
+cp "$(sibling_or ../cloudwatch-agent/config.json)" /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
 echo "==> Installing the deploy entrypoint at a stable path"
 # deploy.sh lives here (not under $APP_DIR/current, which doesn't exist
