@@ -18,7 +18,6 @@ import { Route as ScheduleIndexRouteImport } from './routes/schedule.index'
 import { Route as ScheduleDateRouteImport } from './routes/schedule.$date'
 import { Route as SportsIndexRouteImport } from './routes/sports.index'
 import { Route as SportsSportCodeRouteImport } from './routes/sports.$sportCode'
-import { Route as ApiPublicFeedTestRouteImport } from './routes/api/public/feed-test'
 import { Route as ApiPublicIngestRouteImport } from './routes/api/public/ingest'
 import { Route as ApiPublicStatusCheckRouteImport } from './routes/api/public/status-check'
 import { Route as ApiPublicStatusDataRouteImport } from './routes/api/public/status-data'
@@ -72,11 +71,6 @@ const SportsSportCodeRoute = SportsSportCodeRouteImport.update({
   path: '/sports/$sportCode',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicFeedTestRoute = ApiPublicFeedTestRouteImport.update({
-  id: '/api/public/feed-test',
-  path: '/api/public/feed-test',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicIngestRoute = ApiPublicIngestRouteImport.update({
   id: '/api/public/ingest',
   path: '/api/public/ingest',
@@ -123,7 +117,6 @@ export interface FileRoutesByFullPath {
   '/sports/$sportCode': typeof SportsSportCodeRoute
   '/schedule/': typeof ScheduleIndexRoute
   '/sports/': typeof SportsIndexRoute
-  '/api/public/feed-test': typeof ApiPublicFeedTestRoute
   '/api/public/ingest': typeof ApiPublicIngestRoute
   '/api/public/status-check': typeof ApiPublicStatusCheckRoute
   '/api/public/status-data': typeof ApiPublicStatusDataRoute
@@ -142,7 +135,6 @@ export interface FileRoutesByTo {
   '/sports/$sportCode': typeof SportsSportCodeRoute
   '/schedule': typeof ScheduleIndexRoute
   '/sports': typeof SportsIndexRoute
-  '/api/public/feed-test': typeof ApiPublicFeedTestRoute
   '/api/public/ingest': typeof ApiPublicIngestRoute
   '/api/public/status-check': typeof ApiPublicStatusCheckRoute
   '/api/public/status-data': typeof ApiPublicStatusDataRoute
@@ -162,7 +154,6 @@ export interface FileRoutesById {
   '/sports/$sportCode': typeof SportsSportCodeRoute
   '/schedule/': typeof ScheduleIndexRoute
   '/sports/': typeof SportsIndexRoute
-  '/api/public/feed-test': typeof ApiPublicFeedTestRoute
   '/api/public/ingest': typeof ApiPublicIngestRoute
   '/api/public/status-check': typeof ApiPublicStatusCheckRoute
   '/api/public/status-data': typeof ApiPublicStatusDataRoute
@@ -183,7 +174,6 @@ export interface FileRouteTypes {
     | '/sports/$sportCode'
     | '/schedule/'
     | '/sports/'
-    | '/api/public/feed-test'
     | '/api/public/ingest'
     | '/api/public/status-check'
     | '/api/public/status-data'
@@ -202,7 +192,6 @@ export interface FileRouteTypes {
     | '/sports/$sportCode'
     | '/schedule'
     | '/sports'
-    | '/api/public/feed-test'
     | '/api/public/ingest'
     | '/api/public/status-check'
     | '/api/public/status-data'
@@ -221,7 +210,6 @@ export interface FileRouteTypes {
     | '/sports/$sportCode'
     | '/schedule/'
     | '/sports/'
-    | '/api/public/feed-test'
     | '/api/public/ingest'
     | '/api/public/status-check'
     | '/api/public/status-data'
@@ -241,7 +229,6 @@ export interface RootRouteChildren {
   SportsSportCodeRoute: typeof SportsSportCodeRoute
   ScheduleIndexRoute: typeof ScheduleIndexRoute
   SportsIndexRoute: typeof SportsIndexRoute
-  ApiPublicFeedTestRoute: typeof ApiPublicFeedTestRoute
   ApiPublicIngestRoute: typeof ApiPublicIngestRoute
   ApiPublicStatusCheckRoute: typeof ApiPublicStatusCheckRoute
   ApiPublicStatusDataRoute: typeof ApiPublicStatusDataRoute
@@ -316,13 +303,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SportsSportCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/feed-test': {
-      id: '/api/public/feed-test'
-      path: '/api/public/feed-test'
-      fullPath: '/api/public/feed-test'
-      preLoaderRoute: typeof ApiPublicFeedTestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/ingest': {
       id: '/api/public/ingest'
       path: '/api/public/ingest'
@@ -385,7 +365,6 @@ const rootRouteChildren: RootRouteChildren = {
   SportsSportCodeRoute: SportsSportCodeRoute,
   ScheduleIndexRoute: ScheduleIndexRoute,
   SportsIndexRoute: SportsIndexRoute,
-  ApiPublicFeedTestRoute: ApiPublicFeedTestRoute,
   ApiPublicIngestRoute: ApiPublicIngestRoute,
   ApiPublicStatusCheckRoute: ApiPublicStatusCheckRoute,
   ApiPublicStatusDataRoute: ApiPublicStatusDataRoute,

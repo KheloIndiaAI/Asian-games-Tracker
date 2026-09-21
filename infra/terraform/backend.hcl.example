@@ -1,0 +1,9 @@
+# Copy to backend.hcl (gitignored) and fill in with the outputs of
+# `terraform -chdir=../terraform-state apply` (see infra/README.md).
+# Then: terraform init -backend-config=backend.hcl
+
+bucket         = "cheer4bharat-tfstate-XXXXXXXX"
+key            = "cheer4bharat.tfstate"
+region         = "ap-south-1"
+dynamodb_table = "cheer4bharat-tfstate-lock"
+encrypt        = true

@@ -12,6 +12,8 @@ locals {
     "render-env.sh"               = "${path.module}/../scripts/render-env.sh"
     "cheer4bharat-web.service"    = "${path.module}/../systemd/cheer4bharat-web.service"
     "cheer4bharat-worker.service" = "${path.module}/../systemd/cheer4bharat-worker.service"
+    "config.json"                 = "${path.module}/../cloudwatch-agent/config.json"
+    "rsyslog-cheer4bharat.conf"   = "${path.module}/../cloudwatch-agent/rsyslog-cheer4bharat.conf"
   }
 }
 

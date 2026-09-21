@@ -5,12 +5,20 @@
 //
 // Run with: node --import tsx src/worker/index.ts   (see package.json "worker" script)
 
+import { CloudWatchClient, PutMetricDataCommand } from "@aws-sdk/client-cloudwatch";
 import { getSql } from "../lib/pg.server";
 import { newCtx, runIngestMode, indiaLiveWindowActive } from "../server/ingest-engine";
 
 const sql = getSql();
 const MIN = 60_000;
 const HOUR = 60 * MIN;
+
+// Credentials and region come from the EC2 instance role / IMDS (the SDK's
+// default provider chain) — nothing to configure. If PutMetricData starts
+// failing with a credentials or region error outside EC2 (e.g. local dev),
+// that's expected; the job just logs and moves on (see publishFreshness).
+const cloudwatch = new CloudWatchClient({});
+const FRESHNESS_MODES = ["cycle", "results", "medals", "entries"] as const;
 
 const running = new Set<string>();
 
@@ -100,6 +108,31 @@ schedule("fetchlog-cleanup", 24 * HOUR, 0, async () => {
   const result = await sql`DELETE FROM fetch_log WHERE started_at < now() - interval '3 days'`;
   log("fetchlog-cleanup", { deleted: result.count });
 });
+
+// Ingest freshness: publishes how many minutes it's been since each mode
+// last completed successfully, so a CloudWatch alarm can page on staleness
+// (see infra/terraform/cloudwatch.tf's ingest_freshness alarm on "cycle")
+// instead of someone noticing the site looks stuck.
+async function publishFreshness() {
+  const rows: any[] = await sql`
+    SELECT mode, max(started_at) AS last_ok
+    FROM fetch_log
+    WHERE ok = true AND mode = ANY(${FRESHNESS_MODES})
+    GROUP BY mode
+  `;
+  if (!rows.length) return;
+  const now = Date.now();
+  await cloudwatch.send(new PutMetricDataCommand({
+    Namespace: "Cheer4Bharat/Ingest",
+    MetricData: rows.map((r) => ({
+      MetricName: "MinutesSinceLastOk",
+      Dimensions: [{ Name: "Mode", Value: r.mode }],
+      Unit: "Count",
+      Value: Math.max(0, Math.round((now - Date.parse(r.last_ok)) / 60000)),
+    })),
+  }));
+}
+schedule("publish-freshness", 5 * MIN, 30_000, publishFreshness);
 
 console.log(`[worker] started ${new Date().toISOString()}`);
 

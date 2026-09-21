@@ -10,8 +10,8 @@ import {
   parseFeedTime,
   spokenName,
   todayInJst,
-} from "@/server/feed";
-import { getSql } from "@/lib/pg.server";
+} from "./feed";
+import { getSql } from "../lib/pg.server";
 
 // The ingest "engine": fetches from the Games feed and writes to Postgres.
 // Called directly by the worker's scheduler (src/worker/index.ts) and by the
@@ -940,7 +940,6 @@ export async function runMedals(ctx: Ctx) {
     })
     .filter(Boolean) as any[];
 
-  const keep = rows.map((r) => r.competitor_key);
   if (rows.length) {
     try {
       const medalCols = [
@@ -962,16 +961,32 @@ export async function runMedals(ctx: Ctx) {
     } catch (err) {
       ctx.errors.push({ table: "india_medals", error: err instanceof Error ? err.message : String(err) });
     }
-  }
-  // remove medals no longer in the official feed
-  try {
-    if (keep.length) {
-      await sql`DELETE FROM india_medals WHERE NOT (competitor_key = ANY(${keep}))`;
-    } else {
-      await sql`DELETE FROM india_medals`;
+
+    // Remove medals no longer in the official feed — matched by the full
+    // composite key, not just competitor_key: a competitor can hold medals
+    // in more than one event, and keying on competitor_key alone would
+    // keep a revoked medal alive as long as that person still has any
+    // other medal in the feed. Only runs when the feed actually returned
+    // rows: an empty feed is far more likely a transient fetch hiccup than
+    // "India just lost every medal", and wiping the table on that would be
+    // real data loss.
+    try {
+      await sql`
+        DELETE FROM india_medals t
+        WHERE NOT EXISTS (
+          SELECT 1 FROM unnest(
+            ${rows.map((r) => r.sport_code)}::text[],
+            ${rows.map((r) => r.event_code)}::text[],
+            ${rows.map((r) => r.competitor_key)}::text[]
+          ) AS k(sport_code, event_code, competitor_key)
+          WHERE k.sport_code = t.sport_code
+            AND k.event_code = t.event_code
+            AND k.competitor_key = t.competitor_key
+        )
+      `;
+    } catch (err) {
+      ctx.errors.push({ table: "india_medals:delete", error: err instanceof Error ? err.message : String(err) });
     }
-  } catch (err) {
-    ctx.errors.push({ table: "india_medals:delete", error: err instanceof Error ? err.message : String(err) });
   }
 
   // --- medal standings (full refresh) ---
