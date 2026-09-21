@@ -1,1 +1,201 @@
-// auto-generated and intentionally left blank, do not edit
+import {
+  pgTable,
+  text,
+  integer,
+  bigint,
+  bigserial,
+  boolean,
+  timestamp,
+  date,
+  jsonb,
+  primaryKey,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+
+export const sports = pgTable("sports", {
+  code: text("code").primaryKey(),
+  name: text("name"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const events = pgTable(
+  "events",
+  {
+    sportCode: text("sport_code").notNull(),
+    eventCode: text("event_code").notNull(),
+    name: text("name"),
+    gender: text("gender"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.sportCode, t.eventCode] })],
+);
+
+export const countries = pgTable("countries", {
+  code: text("code").primaryKey(),
+  name: text("name"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const scheduleItems = pgTable(
+  "schedule_items",
+  {
+    sportCode: text("sport_code").notNull(),
+    resCode: text("res_code").notNull(),
+    eventCode: text("event_code"),
+    eventName: text("event_name"),
+    phaseCode: text("phase_code"),
+    phaseName: text("phase_name"),
+    unitName: text("unit_name"),
+    unitNameShort: text("unit_name_short"),
+    unitNum: text("unit_num"),
+    startTime: timestamp("start_time", { withTimezone: true }),
+    startJst: text("start_jst"),
+    startIst: text("start_ist"),
+    dateJst: date("date_jst"),
+    dateIst: date("date_ist"),
+    venueCode: text("venue_code"),
+    venueName: text("venue_name"),
+    locationName: text("location_name"),
+    status: text("status"),
+    statusDesc: text("status_desc"),
+    isLive: boolean("is_live").notNull().default(false),
+    isH2h: boolean("is_h2h").notNull().default(false),
+    medalFlag: text("medal_flag"),
+    orgs: text("orgs").array().notNull().default([]),
+    hasIndia: boolean("has_india").notNull().default(false),
+    home: jsonb("home"),
+    away: jsonb("away"),
+    raw: jsonb("raw"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    indiaResultFetchedAt: timestamp("india_result_fetched_at", { withTimezone: true }),
+    indiaEntered: boolean("india_entered").notNull().default(false),
+    shortId: bigint("short_id", { mode: "number" })
+      .notNull()
+      .generatedByDefaultAsIdentity({ startWith: 1000 }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.sportCode, t.resCode] }),
+    index("idx_schedule_items_date_jst").on(t.dateJst),
+    index("idx_schedule_items_date_ist").on(t.dateIst),
+    index("idx_schedule_items_has_india").on(t.hasIndia),
+    index("idx_schedule_items_status").on(t.status),
+    index("idx_schedule_items_sport_code").on(t.sportCode),
+    index("idx_schedule_items_india_entered").on(t.indiaEntered),
+    index("idx_schedule_items_event").on(t.sportCode, t.eventCode),
+    index("idx_schedule_items_start_time").on(t.startTime),
+    index("idx_schedule_items_india_date").on(t.hasIndia, t.dateIst),
+    index("idx_schedule_items_india_start").on(t.hasIndia, t.startTime),
+    index("idx_schedule_items_live").on(t.isLive),
+    uniqueIndex("schedule_items_short_id_key").on(t.shortId),
+  ],
+);
+
+export const indiaResults = pgTable(
+  "india_results",
+  {
+    sportCode: text("sport_code").notNull(),
+    resCode: text("res_code").notNull(),
+    competitorKey: text("competitor_key").notNull(),
+    athleteOrTeam: text("athlete_or_team"),
+    isTeam: boolean("is_team").notNull().default(false),
+    opponentCode: text("opponent_code"),
+    opponentName: text("opponent_name"),
+    opponentCountryCode: text("opponent_country_code"),
+    opponentCountryName: text("opponent_country_name"),
+    spokenName: text("spoken_name"),
+    indiaScore: text("india_score"),
+    opponentScore: text("opponent_score"),
+    outcome: text("outcome"),
+    rank: text("rank"),
+    resultMark: text("result_mark"),
+    qualified: text("qualified"),
+    irm: text("irm"),
+    medal: text("medal"),
+    medalRaw: text("medal_raw"),
+    periods: jsonb("periods"),
+    spokenSummaryEn: text("spoken_summary_en"),
+    status: text("status"),
+    startTime: timestamp("start_time", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.sportCode, t.resCode, t.competitorKey] }),
+    index("idx_india_results_updated").on(t.updatedAt),
+    index("idx_india_results_start").on(t.startTime),
+    index("idx_india_results_sport_res").on(t.sportCode, t.resCode),
+    index("idx_india_results_res").on(t.resCode),
+  ],
+);
+
+export const indiaMedals = pgTable(
+  "india_medals",
+  {
+    sportCode: text("sport_code").notNull(),
+    eventCode: text("event_code").notNull(),
+    competitorKey: text("competitor_key").notNull(),
+    medal: text("medal"),
+    athleteOrTeam: text("athlete_or_team"),
+    eventName: text("event_name"),
+    sportName: text("sport_name"),
+    dateIst: date("date_ist"),
+    resCode: text("res_code"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    reg: text("reg"),
+    spokenName: text("spoken_name"),
+    members: jsonb("members"),
+    membersSpoken: text("members_spoken"),
+    gender: text("gender"),
+    wonAt: timestamp("won_at", { withTimezone: true }),
+    spokenSummaryEn: text("spoken_summary_en"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.sportCode, t.eventCode, t.competitorKey] })],
+);
+
+export const medalStandings = pgTable("medal_standings", {
+  orgCode: text("org_code").primaryKey(),
+  orgName: text("org_name"),
+  rank: text("rank"),
+  gold: integer("gold").notNull().default(0),
+  silver: integer("silver").notNull().default(0),
+  bronze: integer("bronze").notNull().default(0),
+  total: integer("total").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const indiaEntries = pgTable(
+  "india_entries",
+  {
+    sportCode: text("sport_code").notNull(),
+    reg: text("reg").notNull(),
+    eventCode: text("event_code").notNull(),
+    name: text("name"),
+    spokenName: text("spoken_name"),
+    gender: text("gender"),
+    type: text("type"),
+    eventName: text("event_name"),
+    isMember: boolean("is_member").notNull().default(false),
+    sportName: text("sport_name"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.sportCode, t.reg, t.eventCode] }),
+    index("idx_india_entries_event").on(t.sportCode, t.eventCode),
+  ],
+);
+
+export const fetchLog = pgTable("fetch_log", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  mode: text("mode"),
+  params: jsonb("params"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  feedCalls: integer("feed_calls").notNull().default(0),
+  itemsSeen: integer("items_seen").notNull().default(0),
+  rowsChanged: integer("rows_changed").notNull().default(0),
+  indiaItems: integer("india_items").notNull().default(0),
+  errors: jsonb("errors"),
+  ok: boolean("ok"),
+});

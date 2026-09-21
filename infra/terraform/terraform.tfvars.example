@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+
+alert_email       = "you@example.com"
+github_repository = "KheloIndiaAI/Asian-games-Tracker"
+
+# Leave these at their defaults unless you have a reason to change them:
+# domain_name         = "ag.ccki.in"
+# create_route53_zone = false
+# ec2_instance_type   = "t4g.small"
+# rds_instance_class  = "db.t4g.micro"
+# monthly_budget_usd  = 50

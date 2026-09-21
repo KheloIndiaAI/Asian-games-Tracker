@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { isVoiceEnabled } from "@/lib/secrets.server";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -18,13 +19,7 @@ export const Route = createFileRoute("/api/public/voice-config")({
       OPTIONS: async () => new Response(null, { status: 204, headers: JSON_HEADERS }),
       GET: async () => {
         const apiKey = process.env["SARVAM_EMBED_KEY"];
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { data: flag } = await supabaseAdmin
-          .from("app_secrets")
-          .select("value")
-          .eq("key", "voice_enabled")
-          .maybeSingle();
-        const enabled = String(flag?.value ?? "false").trim().toLowerCase() === "true" && !!apiKey;
+        const enabled = isVoiceEnabled() && !!apiKey;
 
         if (!enabled) {
           return Response.json(

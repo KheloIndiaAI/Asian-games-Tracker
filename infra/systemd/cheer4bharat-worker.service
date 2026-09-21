@@ -1,0 +1,27 @@
+[Unit]
+Description=Cheer4Bharat ingest worker (scheduler — replaces pg_cron/pg_net)
+After=network-online.target cheer4bharat-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cheer4bharat
+Group=cheer4bharat
+WorkingDirectory=/opt/cheer4bharat/current
+EnvironmentFile=/etc/cheer4bharat/env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run worker
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cheer4bharat-worker
+
+# Least-privilege hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/cheer4bharat
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -9,6 +9,10 @@ import {
   todayInIst,
   whenPhrase,
 } from "@/server/feed";
+import { getSql } from "@/lib/pg.server";
+import { getAgentKey } from "@/lib/secrets.server";
+
+type Sql = ReturnType<typeof getSql>;
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -190,7 +194,7 @@ function itemSummary(item: any, results: any[], sportName: string) {
 /* --------------------------------- handler -------------------------------- */
 
 type Env = {
-  admin: any;
+  sql: Sql;
   sports: { code: string; name: string }[];
   sportName: (code: string) => string;
   asOf: string | null;
@@ -198,8 +202,13 @@ type Env = {
   param: (name: string) => string | null;
 };
 
-const ITEM_COLS =
-  "sport_code,res_code,event_code,event_name,phase_name,start_ist,start_time,date_ist,status,is_live,is_h2h,medal_flag,venue_name,home,away,raw";
+// Column list shared by every `schedule_items` read below. `start_time` and
+// `date_ist` are timestamptz/date columns; they are wrapped in `to_json(...)`
+// so postgres.js hands back the same ISO-8601 string Postgres's own JSON
+// serialization produces (matching this API's existing JSON contract),
+// instead of a JS Date object.
+const ITEM_SELECT =
+  "sport_code,res_code,event_code,event_name,phase_name,start_ist,to_json(start_time) as start_time,to_json(date_ist) as date_ist,status,is_live,is_h2h,medal_flag,venue_name,home,away,raw";
 
 function sideMembers(side: any): string[] {
   if (!side || typeof side !== "object") return [];
@@ -233,17 +242,16 @@ function withPlayers(summary: string, item: any, include: boolean) {
   return sentence ? `${summary} ${sentence}` : summary;
 }
 
-async function resultsFor(admin: any, items: any[]) {
+async function resultsFor(sql: Sql, items: any[]) {
   const map = new Map<string, any[]>();
   if (!items.length) return map;
   const codes = [...new Set(items.map((i) => i.res_code))];
-  const { data } = await admin
-    .from("india_results")
-    .select(
-      "sport_code,res_code,competitor_key,athlete_or_team,spoken_name,is_team,opponent_name,opponent_country_name,india_score,opponent_score,outcome,rank,result_mark,qualified,irm,medal,status,spoken_summary_en",
-    )
-    .in("res_code", codes);
-  for (const r of data ?? []) {
+  const data: any[] = await sql`
+    SELECT sport_code,res_code,competitor_key,athlete_or_team,spoken_name,is_team,opponent_name,opponent_country_name,india_score,opponent_score,outcome,rank,result_mark,qualified,irm,medal,status,spoken_summary_en
+    FROM india_results
+    WHERE res_code IN ${sql(codes)}
+  `;
+  for (const r of data) {
     const key = `${r.sport_code}|${r.res_code}`;
     const list = map.get(key) ?? [];
     list.push(r);
@@ -259,28 +267,27 @@ async function indiaToday(env: Env) {
   if (date < today) return indiaResults(env, date);
 
   const sportFilter = matchSports(env.param("sport"), env.sports);
+  const sportCodes = sportFilter?.length ? sportFilter.map((s) => s.code) : null;
+  const sql = env.sql;
 
-  let q = env.admin
-    .from("schedule_items")
-    .select(ITEM_COLS)
-    .eq("has_india", true)
-    .eq("date_ist", date)
-    .order("start_ist", { ascending: true })
-    .limit(60);
-  if (sportFilter?.length) q = q.in("sport_code", sportFilter.map((s) => s.code));
-  const { data: items } = await q;
-  const rows = items ?? [];
+  const rows: any[] = await sql`
+    SELECT ${sql.unsafe(ITEM_SELECT)}
+    FROM schedule_items
+    WHERE has_india = true AND date_ist = ${date}
+    ${sportCodes ? sql`AND sport_code IN ${sql(sportCodes)}` : sql``}
+    ORDER BY start_ist ASC
+    LIMIT 60
+  `;
 
   if (!rows.length) {
-    let eq = env.admin
-      .from("schedule_items")
-      .select("sport_code")
-      .eq("india_entered", true)
-      .eq("date_ist", date)
-      .limit(200);
-    if (sportFilter?.length) eq = eq.in("sport_code", sportFilter.map((s) => s.code));
-    const { data: entered } = await eq;
-    const sportsList = [...new Set((entered ?? []).map((r: any) => env.sportName(r.sport_code)))];
+    const entered: any[] = await sql`
+      SELECT sport_code
+      FROM schedule_items
+      WHERE india_entered = true AND date_ist = ${date}
+      ${sportCodes ? sql`AND sport_code IN ${sql(sportCodes)}` : sql``}
+      LIMIT 200
+    `;
+    const sportsList = [...new Set(entered.map((r: any) => env.sportName(r.sport_code)))];
     const dayWord = date === today ? "today" : date === todayInIst(1) ? "tomorrow" : spokenDate(date);
     const answer = sportsList.length
       ? joinSentences([
@@ -290,10 +297,10 @@ async function indiaToday(env: Env) {
           }, but the draw is not published yet.`,
         ])
       : `Nothing is scheduled for India ${date === today ? "today" : `on ${spokenDate(date)}`}.`;
-    return { answer, items: entered ?? [] };
+    return { answer, items: entered };
   }
 
-  const resMap = await resultsFor(env.admin, rows);
+  const resMap = await resultsFor(sql, rows);
   const line = (r: any) => withPlayers(
     itemSummary(r, resMap.get(`${r.sport_code}|${r.res_code}`) ?? [], env.sportName(r.sport_code)),
     r,
@@ -339,29 +346,30 @@ async function indiaToday(env: Env) {
 }
 
 async function indiaLive(env: Env) {
+  const sql = env.sql;
   const sportFilter = matchSports(env.param("sport"), env.sports);
-  let query = env.admin
-    .from("schedule_items")
-    .select(ITEM_COLS)
-    .eq("has_india", true)
-    .or("is_live.eq.true,status.eq.RUNNING")
-    .order("start_time", { ascending: true })
-    .limit(25);
-  if (sportFilter?.length) query = query.in("sport_code", sportFilter.map((s) => s.code));
-  const { data } = await query;
-  const rows = data ?? [];
+  const sportCodes = sportFilter?.length ? sportFilter.map((s) => s.code) : null;
+
+  const rows: any[] = await sql`
+    SELECT ${sql.unsafe(ITEM_SELECT)}
+    FROM schedule_items
+    WHERE has_india = true AND (is_live = true OR status = 'RUNNING')
+    ${sportCodes ? sql`AND sport_code IN ${sql(sportCodes)}` : sql``}
+    ORDER BY start_time ASC
+    LIMIT 25
+  `;
 
   if (!rows.length) {
-    const { data: next } = await env.admin
-      .from("schedule_items")
-      .select(ITEM_COLS)
-      .eq("has_india", true)
-      .gt("start_time", new Date().toISOString())
-      .order("start_time", { ascending: true })
-      .limit(1);
+    const next: any[] = await sql`
+      SELECT ${sql.unsafe(ITEM_SELECT)}
+      FROM schedule_items
+      WHERE has_india = true AND start_time > ${new Date().toISOString()}
+      ORDER BY start_time ASC
+      LIMIT 1
+    `;
     const n = next?.[0];
     if (!n) return { answer: "No India event is live right now, and nothing more is scheduled.", items: [] };
-    const resMap = await resultsFor(env.admin, [n]);
+    const resMap = await resultsFor(sql, [n]);
     const summary = withPlayers(itemSummary(
       n,
       resMap.get(`${n.sport_code}|${n.res_code}`) ?? [],
@@ -373,7 +381,7 @@ async function indiaLive(env: Env) {
     };
   }
 
-  const resMap = await resultsFor(env.admin, rows);
+  const resMap = await resultsFor(sql, rows);
   const lines = rows.map((r: any) => withPlayers(
     itemSummary(r, resMap.get(`${r.sport_code}|${r.res_code}`) ?? [], env.sportName(r.sport_code)),
     r,
@@ -405,40 +413,38 @@ function athleteFilter(rows: any[], name: string | null) {
 }
 
 async function indiaResults(env: Env, forcedDate?: string) {
+  const sql = env.sql;
   const sportFilter = matchSports(env.param("sport"), env.sports);
+  const sportCodes = sportFilter?.length ? sportFilter.map((s) => s.code) : null;
   const dateParam = forcedDate ?? env.param("date");
   const athlete = env.param("athlete");
 
-  let q = env.admin
-    .from("india_results")
-    .select(
-      "sport_code,res_code,athlete_or_team,spoken_name,outcome,rank,medal,status,start_time,spoken_summary_en",
-    )
-    .in("status", FINISHED)
-    .order("start_time", { ascending: false })
-    .limit(200);
-  if (sportFilter?.length) q = q.in("sport_code", sportFilter.map((s) => s.code));
-  if (dateParam) {
-    const d = resolveDate(dateParam);
-    q = q
-      .gte("start_time", `${d}T00:00:00+05:30`)
-      .lte("start_time", `${d}T23:59:59+05:30`);
-  } else {
-    q = q.gte("start_time", new Date(Date.now() - 24 * 3600 * 1000).toISOString());
-  }
-  const { data } = await q;
-  const rows = athleteFilter(data ?? [], athlete).slice(0, 25);
+  const dateFilter = dateParam
+    ? sql`AND start_time >= ${`${resolveDate(dateParam)}T00:00:00+05:30`} AND start_time <= ${`${resolveDate(dateParam)}T23:59:59+05:30`}`
+    : sql`AND start_time >= ${new Date(Date.now() - 24 * 3600 * 1000).toISOString()}`;
+
+  const data: any[] = await sql`
+    SELECT sport_code,res_code,athlete_or_team,spoken_name,outcome,rank,medal,status,to_json(start_time) as start_time,spoken_summary_en
+    FROM india_results
+    WHERE status IN ${sql(FINISHED)}
+    ${sportCodes ? sql`AND sport_code IN ${sql(sportCodes)}` : sql``}
+    ${dateFilter}
+    ORDER BY start_time DESC
+    LIMIT 200
+  `;
+  const rows = athleteFilter(data, athlete).slice(0, 25);
 
   if (!rows.length) {
     return { answer: "I don't have any finished India results for that yet.", items: [] };
   }
   const scheduleMap = new Map<string, any>();
   if (sportFilter?.length && rows.length) {
-    const { data: scheduleRows } = await env.admin
-      .from("schedule_items")
-      .select(ITEM_COLS)
-      .in("res_code", [...new Set(rows.map((r: any) => r.res_code))]);
-    for (const item of scheduleRows ?? []) scheduleMap.set(`${item.sport_code}|${item.res_code}`, item);
+    const scheduleRows: any[] = await sql`
+      SELECT ${sql.unsafe(ITEM_SELECT)}
+      FROM schedule_items
+      WHERE res_code IN ${sql([...new Set(rows.map((r: any) => r.res_code))])}
+    `;
+    for (const item of scheduleRows) scheduleMap.set(`${item.sport_code}|${item.res_code}`, item);
   }
   const lines = rows.map((r: any) => withPlayers(r.spoken_summary_en ?? "", scheduleMap.get(`${r.sport_code}|${r.res_code}`), !!sportFilter?.length)).filter(Boolean);
   const dayLead =
@@ -459,28 +465,26 @@ async function indiaResults(env: Env, forcedDate?: string) {
 }
 
 async function nextEvent(env: Env) {
+  const sql = env.sql;
   const sportFilter = matchSports(env.param("sport"), env.sports);
+  const sportCodes = sportFilter?.length ? sportFilter.map((s) => s.code) : null;
   const athlete = env.param("athlete");
   const nowIso = new Date().toISOString();
 
-  let q = env.admin
-    .from("schedule_items")
-    .select(ITEM_COLS)
-    .eq("has_india", true)
-    .gt("start_time", nowIso)
-    .order("start_time", { ascending: true })
-    .limit(25);
-  if (sportFilter?.length) q = q.in("sport_code", sportFilter.map((s) => s.code));
-  const { data } = await q;
-  let rows = data ?? [];
+  let rows: any[] = await sql`
+    SELECT ${sql.unsafe(ITEM_SELECT)}
+    FROM schedule_items
+    WHERE has_india = true AND start_time > ${nowIso}
+    ${sportCodes ? sql`AND sport_code IN ${sql(sportCodes)}` : sql``}
+    ORDER BY start_time ASC
+    LIMIT 25
+  `;
 
   if (athlete) {
     const q2 = normalize(athlete);
-    const { data: ent } = await env.admin
-      .from("india_entries")
-      .select("sport_code,event_code,name,spoken_name");
+    const ent: any[] = await sql`SELECT sport_code,event_code,name,spoken_name FROM india_entries`;
     const events = new Set(
-      (ent ?? [])
+      ent
         .filter(
           (e: any) =>
             normalize(e.name || "").includes(q2) || normalize(e.spoken_name || "").includes(q2),
@@ -492,7 +496,7 @@ async function nextEvent(env: Env) {
 
   const item = rows[0];
   if (item) {
-    const resMap = await resultsFor(env.admin, [item]);
+    const resMap = await resultsFor(sql, [item]);
     const summary = itemSummary(
       item,
       resMap.get(`${item.sport_code}|${item.res_code}`) ?? [],
@@ -502,15 +506,14 @@ async function nextEvent(env: Env) {
   }
 
   // fall back to an entered event without a published start list
-  let eq = env.admin
-    .from("schedule_items")
-    .select(ITEM_COLS)
-    .eq("india_entered", true)
-    .gt("start_time", nowIso)
-    .order("start_time", { ascending: true })
-    .limit(1);
-  if (sportFilter?.length) eq = eq.in("sport_code", sportFilter.map((s) => s.code));
-  const { data: entered } = await eq;
+  const entered: any[] = await sql`
+    SELECT ${sql.unsafe(ITEM_SELECT)}
+    FROM schedule_items
+    WHERE india_entered = true AND start_time > ${nowIso}
+    ${sportCodes ? sql`AND sport_code IN ${sql(sportCodes)}` : sql``}
+    ORDER BY start_time ASC
+    LIMIT 1
+  `;
   const e = entered?.[0];
   if (!e) return { answer: "I don't have an upcoming India event for that.", items: [] };
   return {
@@ -526,17 +529,18 @@ async function nextEvent(env: Env) {
 }
 
 async function medalTally(env: Env) {
+  const sql = env.sql;
   const sportFilter = matchSports(env.param("sport"), env.sports);
   const country = (env.param("country") || "IND").toUpperCase();
 
   if (sportFilter?.length) {
-    const { data } = await env.admin
-      .from("india_medals")
-      .select("sport_code,medal,spoken_summary_en,won_at")
-      .in("sport_code", sportFilter.map((s) => s.code))
-      .order("won_at", { ascending: false })
-      .limit(25);
-    const rows = data ?? [];
+    const rows: any[] = await sql`
+      SELECT sport_code,medal,spoken_summary_en,to_json(won_at) as won_at
+      FROM india_medals
+      WHERE sport_code IN ${sql(sportFilter.map((s) => s.code))}
+      ORDER BY won_at DESC
+      LIMIT 25
+    `;
     const g = rows.filter((r: any) => r.medal === "gold").length;
     const s = rows.filter((r: any) => r.medal === "silver").length;
     const b = rows.filter((r: any) => r.medal === "bronze").length;
@@ -553,14 +557,19 @@ async function medalTally(env: Env) {
     };
   }
 
-  const [{ data: st }, { data: latest }] = await Promise.all([
-    env.admin.from("medal_standings").select("*").eq("org_code", country).maybeSingle(),
-    env.admin
-      .from("india_medals")
-      .select("medal,spoken_summary_en,won_at")
-      .order("won_at", { ascending: false })
-      .limit(3),
+  const [stRows, latest] = await Promise.all([
+    sql`
+      SELECT org_code,org_name,rank,gold,silver,bronze,total,to_json(updated_at) as updated_at
+      FROM medal_standings WHERE org_code = ${country} LIMIT 1
+    `,
+    sql`
+      SELECT medal,spoken_summary_en,to_json(won_at) as won_at
+      FROM india_medals
+      ORDER BY won_at DESC
+      LIMIT 3
+    `,
   ]);
+  const st: any = stRows[0] ?? null;
 
   if (country !== "IND") {
     const answer = st
@@ -585,19 +594,19 @@ async function medalTally(env: Env) {
 }
 
 async function schedule(env: Env) {
+  const sql = env.sql;
   const sportFilter = matchSports(env.param("sport"), env.sports);
   const date = resolveDate(env.param("date"));
   if (!sportFilter?.length)
     return { answer: "Which sport would you like the schedule for?", items: [] };
 
-  const { data } = await env.admin
-    .from("schedule_items")
-    .select(ITEM_COLS)
-    .in("sport_code", sportFilter.map((s) => s.code))
-    .eq("date_ist", date)
-    .order("start_ist", { ascending: true })
-    .limit(500);
-  const rows = data ?? [];
+  const rows: any[] = await sql`
+    SELECT ${sql.unsafe(ITEM_SELECT)}
+    FROM schedule_items
+    WHERE sport_code IN ${sql(sportFilter.map((s) => s.code))} AND date_ist = ${date}
+    ORDER BY start_ist ASC
+    LIMIT 500
+  `;
   const sportLabel = sportFilter.map((s) => s.name).join(" and ");
   const dayWord =
     date === todayInIst(0) ? "today" : date === todayInIst(1) ? "tomorrow" : `on ${spokenDate(date)}`;
@@ -633,20 +642,25 @@ async function schedule(env: Env) {
 }
 
 async function athlete(env: Env) {
+  const sql = env.sql;
   const name = env.param("name") || env.param("athlete");
   if (!name) return { answer: "Which athlete would you like to know about?", items: [] };
   const q = normalize(name);
 
-  const [{ data: entries }, { data: results }] = await Promise.all([
-    env.admin.from("india_entries").select("*").limit(2000),
-    env.admin
-      .from("india_results")
-      .select("sport_code,athlete_or_team,spoken_name,spoken_summary_en,start_time,status")
-      .order("start_time", { ascending: false })
-      .limit(500),
+  const [entries, results]: [any[], any[]] = await Promise.all([
+    sql`
+      SELECT sport_code,reg,event_code,name,spoken_name,gender,type,event_name,is_member,sport_name,to_json(updated_at) as updated_at
+      FROM india_entries LIMIT 2000
+    `,
+    sql`
+      SELECT sport_code,athlete_or_team,spoken_name,spoken_summary_en,to_json(start_time) as start_time,status
+      FROM india_results
+      ORDER BY start_time DESC
+      LIMIT 500
+    `,
   ]);
 
-  const mine = (entries ?? []).filter(
+  const mine = entries.filter(
     (e: any) => normalize(e.name || "").includes(q) || normalize(e.spoken_name || "").includes(q),
   );
   if (!mine.length)
@@ -654,18 +668,18 @@ async function athlete(env: Env) {
 
   const who = mine[0].spoken_name || spokenName(mine[0].name);
   const events = [...new Set(mine.map((e: any) => `${e.sport_name || e.sport_code} ${e.event_name}`))];
-  const theirs = athleteFilter(results ?? [], name).slice(0, 5);
+  const theirs = athleteFilter(results, name).slice(0, 5);
 
   const nowIso = new Date().toISOString();
   const eventKeys = new Set(mine.map((e: any) => `${e.sport_code}|${e.event_code}`));
-  const { data: upcoming } = await env.admin
-    .from("schedule_items")
-    .select(ITEM_COLS)
-    .in("sport_code", [...new Set(mine.map((e: any) => e.sport_code))])
-    .gt("start_time", nowIso)
-    .order("start_time", { ascending: true })
-    .limit(200);
-  const next = (upcoming ?? []).find((r: any) => eventKeys.has(`${r.sport_code}|${r.event_code}`));
+  const upcoming: any[] = await sql`
+    SELECT ${sql.unsafe(ITEM_SELECT)}
+    FROM schedule_items
+    WHERE sport_code IN ${sql([...new Set(mine.map((e: any) => e.sport_code))])} AND start_time > ${nowIso}
+    ORDER BY start_time ASC
+    LIMIT 200
+  `;
+  const next = upcoming.find((r: any) => eventKeys.has(`${r.sport_code}|${r.event_code}`));
 
   const parts = [
     `${who} is entered in ${events.slice(0, 3).join(", ")}${
@@ -690,37 +704,36 @@ async function athlete(env: Env) {
 
 type Cached<T> = { value: T; at: number };
 const CACHE_MS = 60_000;
-let keyCache: Cached<string | null> | null = null;
 let asOfCache: Cached<string | null> | null = null;
 let sportsCache: Cached<{ code: string; name: string }[]> | null = null;
 
-async function cachedKey(admin: any) {
-  if (keyCache && Date.now() - keyCache.at < CACHE_MS) return keyCache.value;
-  const { data } = await admin
-    .from("app_secrets")
-    .select("value")
-    .eq("key", "agent_key")
-    .maybeSingle();
-  keyCache = { value: data?.value ?? null, at: Date.now() };
-  return keyCache.value;
+/** Reads the agent auth key from the environment, returning null (never
+ *  throwing) so a missing key simply results in an unauthorized response. */
+function agentKey(): string | null {
+  try {
+    return getAgentKey();
+  } catch {
+    return null;
+  }
 }
 
-async function cachedAsOf(admin: any) {
+async function cachedAsOf(sql: Sql) {
   if (asOfCache && Date.now() - asOfCache.at < CACHE_MS) return asOfCache.value;
-  const { data } = await admin
-    .from("fetch_log")
-    .select("finished_at")
-    .eq("ok", true)
-    .order("id", { ascending: false })
-    .limit(1);
+  const data: any[] = await sql`
+    SELECT to_json(finished_at) as finished_at
+    FROM fetch_log
+    WHERE ok = true
+    ORDER BY id DESC
+    LIMIT 1
+  `;
   asOfCache = { value: data?.[0]?.finished_at ?? null, at: Date.now() };
   return asOfCache.value;
 }
 
-async function cachedSports(admin: any): Promise<{ code: string; name: string }[]> {
+async function cachedSports(sql: Sql): Promise<{ code: string; name: string }[]> {
   if (sportsCache && Date.now() - sportsCache.at < CACHE_MS) return sportsCache.value;
-  const { data } = await admin.from("sports").select("code,name");
-  const sports = (data ?? []).map((s: any) => ({ code: s.code, name: s.name || s.code }));
+  const data: any[] = await sql`SELECT code, name FROM sports`;
+  const sports = data.map((s: any) => ({ code: s.code, name: s.name || s.code }));
   sportsCache = { value: sports, at: Date.now() };
   return sports;
 }
@@ -749,11 +762,11 @@ async function handle(request: Request, splat: string) {
     const v = url.searchParams.get(name);
     return v && v.trim() ? v.trim() : null;
   };
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const sql = getSql();
 
   const bearer = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
   const supplied = request.headers.get("x-api-key") || param("key") || bearer || "";
-  const expected = await cachedKey(supabaseAdmin);
+  const expected = agentKey();
   if (!expected || supplied !== expected) {
     return Response.json(
       { ok: false, error: "unauthorized" },
@@ -762,12 +775,12 @@ async function handle(request: Request, splat: string) {
   }
 
   const [sports, asOf] = await Promise.all([
-    cachedSports(supabaseAdmin),
-    cachedAsOf(supabaseAdmin),
+    cachedSports(sql),
+    cachedAsOf(sql),
   ]);
   const nameMap = new Map<string, string>(sports.map((s) => [s.code, s.name]));
   const env: Env = {
-    admin: supabaseAdmin,
+    sql,
     sports,
     sportName: (c: string) => nameMap.get(c) ?? c,
     asOf,

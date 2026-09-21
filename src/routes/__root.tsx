@@ -10,7 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { reportLovableError } from "../lib/error-reporting";
 import { PrefsProvider, THEME_BOOT_SCRIPT } from "../lib/prefs";
 import { JeetProvider } from "../components/c4b/JeetProvider";
 import { VoiceFlagProvider } from "../lib/voice-flag";

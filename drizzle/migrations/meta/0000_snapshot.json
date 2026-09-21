@@ -1,15 +1,1191 @@
 {
-  "id": "ddd37889-f35a-4099-9b8a-f51563235b57",
+  "id": "92eec855-7779-4bd4-a736-df84625d985c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
-  "tables": {},
+  "tables": {
+    "public.countries": {
+      "name": "countries",
+      "schema": "",
+      "columns": {
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.events": {
+      "name": "events",
+      "schema": "",
+      "columns": {
+        "sport_code": {
+          "name": "sport_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_code": {
+          "name": "event_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "events_sport_code_event_code_pk": {
+          "name": "events_sport_code_event_code_pk",
+          "columns": [
+            "sport_code",
+            "event_code"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fetch_log": {
+      "name": "fetch_log",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "params": {
+          "name": "params",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "feed_calls": {
+          "name": "feed_calls",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "items_seen": {
+          "name": "items_seen",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "rows_changed": {
+          "name": "rows_changed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "india_items": {
+          "name": "india_items",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "errors": {
+          "name": "errors",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ok": {
+          "name": "ok",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.india_entries": {
+      "name": "india_entries",
+      "schema": "",
+      "columns": {
+        "sport_code": {
+          "name": "sport_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reg": {
+          "name": "reg",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_code": {
+          "name": "event_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spoken_name": {
+          "name": "spoken_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_member": {
+          "name": "is_member",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "sport_name": {
+          "name": "sport_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_india_entries_event": {
+          "name": "idx_india_entries_event",
+          "columns": [
+            {
+              "expression": "sport_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "india_entries_sport_code_reg_event_code_pk": {
+          "name": "india_entries_sport_code_reg_event_code_pk",
+          "columns": [
+            "sport_code",
+            "reg",
+            "event_code"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.india_medals": {
+      "name": "india_medals",
+      "schema": "",
+      "columns": {
+        "sport_code": {
+          "name": "sport_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_code": {
+          "name": "event_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "competitor_key": {
+          "name": "competitor_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "medal": {
+          "name": "medal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "athlete_or_team": {
+          "name": "athlete_or_team",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sport_name": {
+          "name": "sport_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "date_ist": {
+          "name": "date_ist",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "res_code": {
+          "name": "res_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "reg": {
+          "name": "reg",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spoken_name": {
+          "name": "spoken_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "members": {
+          "name": "members",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "members_spoken": {
+          "name": "members_spoken",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "won_at": {
+          "name": "won_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spoken_summary_en": {
+          "name": "spoken_summary_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "india_medals_sport_code_event_code_competitor_key_pk": {
+          "name": "india_medals_sport_code_event_code_competitor_key_pk",
+          "columns": [
+            "sport_code",
+            "event_code",
+            "competitor_key"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.india_results": {
+      "name": "india_results",
+      "schema": "",
+      "columns": {
+        "sport_code": {
+          "name": "sport_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "res_code": {
+          "name": "res_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "competitor_key": {
+          "name": "competitor_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "athlete_or_team": {
+          "name": "athlete_or_team",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_team": {
+          "name": "is_team",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "opponent_code": {
+          "name": "opponent_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opponent_name": {
+          "name": "opponent_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opponent_country_code": {
+          "name": "opponent_country_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opponent_country_name": {
+          "name": "opponent_country_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spoken_name": {
+          "name": "spoken_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "india_score": {
+          "name": "india_score",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opponent_score": {
+          "name": "opponent_score",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rank": {
+          "name": "rank",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "result_mark": {
+          "name": "result_mark",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "qualified": {
+          "name": "qualified",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "irm": {
+          "name": "irm",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "medal": {
+          "name": "medal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "medal_raw": {
+          "name": "medal_raw",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "periods": {
+          "name": "periods",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spoken_summary_en": {
+          "name": "spoken_summary_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_india_results_updated": {
+          "name": "idx_india_results_updated",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_india_results_start": {
+          "name": "idx_india_results_start",
+          "columns": [
+            {
+              "expression": "start_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_india_results_sport_res": {
+          "name": "idx_india_results_sport_res",
+          "columns": [
+            {
+              "expression": "sport_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "res_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_india_results_res": {
+          "name": "idx_india_results_res",
+          "columns": [
+            {
+              "expression": "res_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "india_results_sport_code_res_code_competitor_key_pk": {
+          "name": "india_results_sport_code_res_code_competitor_key_pk",
+          "columns": [
+            "sport_code",
+            "res_code",
+            "competitor_key"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.medal_standings": {
+      "name": "medal_standings",
+      "schema": "",
+      "columns": {
+        "org_code": {
+          "name": "org_code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "org_name": {
+          "name": "org_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rank": {
+          "name": "rank",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gold": {
+          "name": "gold",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "silver": {
+          "name": "silver",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "bronze": {
+          "name": "bronze",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "total": {
+          "name": "total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.schedule_items": {
+      "name": "schedule_items",
+      "schema": "",
+      "columns": {
+        "sport_code": {
+          "name": "sport_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "res_code": {
+          "name": "res_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_code": {
+          "name": "event_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "phase_code": {
+          "name": "phase_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "phase_name": {
+          "name": "phase_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unit_name": {
+          "name": "unit_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unit_name_short": {
+          "name": "unit_name_short",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unit_num": {
+          "name": "unit_num",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_jst": {
+          "name": "start_jst",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_ist": {
+          "name": "start_ist",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "date_jst": {
+          "name": "date_jst",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "date_ist": {
+          "name": "date_ist",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "venue_code": {
+          "name": "venue_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "venue_name": {
+          "name": "venue_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_name": {
+          "name": "location_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_desc": {
+          "name": "status_desc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_live": {
+          "name": "is_live",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_h2h": {
+          "name": "is_h2h",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "medal_flag": {
+          "name": "medal_flag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "orgs": {
+          "name": "orgs",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "has_india": {
+          "name": "has_india",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "home": {
+          "name": "home",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "away": {
+          "name": "away",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "raw": {
+          "name": "raw",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "india_result_fetched_at": {
+          "name": "india_result_fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "india_entered": {
+          "name": "india_entered",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "short_id": {
+          "name": "short_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "identity": {
+            "type": "byDefault",
+            "name": "schedule_items_short_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1000",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        }
+      },
+      "indexes": {
+        "idx_schedule_items_date_jst": {
+          "name": "idx_schedule_items_date_jst",
+          "columns": [
+            {
+              "expression": "date_jst",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_date_ist": {
+          "name": "idx_schedule_items_date_ist",
+          "columns": [
+            {
+              "expression": "date_ist",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_has_india": {
+          "name": "idx_schedule_items_has_india",
+          "columns": [
+            {
+              "expression": "has_india",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_status": {
+          "name": "idx_schedule_items_status",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_sport_code": {
+          "name": "idx_schedule_items_sport_code",
+          "columns": [
+            {
+              "expression": "sport_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_india_entered": {
+          "name": "idx_schedule_items_india_entered",
+          "columns": [
+            {
+              "expression": "india_entered",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_event": {
+          "name": "idx_schedule_items_event",
+          "columns": [
+            {
+              "expression": "sport_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_start_time": {
+          "name": "idx_schedule_items_start_time",
+          "columns": [
+            {
+              "expression": "start_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_india_date": {
+          "name": "idx_schedule_items_india_date",
+          "columns": [
+            {
+              "expression": "has_india",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date_ist",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_india_start": {
+          "name": "idx_schedule_items_india_start",
+          "columns": [
+            {
+              "expression": "has_india",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "start_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_schedule_items_live": {
+          "name": "idx_schedule_items_live",
+          "columns": [
+            {
+              "expression": "is_live",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "schedule_items_short_id_key": {
+          "name": "schedule_items_short_id_key",
+          "columns": [
+            {
+              "expression": "short_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "schedule_items_sport_code_res_code_pk": {
+          "name": "schedule_items_sport_code_res_code_pk",
+          "columns": [
+            "sport_code",
+            "res_code"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sports": {
+      "name": "sports",
+      "schema": "",
+      "columns": {
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
   "enums": {},
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

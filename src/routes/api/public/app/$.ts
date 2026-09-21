@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { athletePath, matchPath, sportPath, sportSlug } from "@/lib/slug";
+import { getSql } from "@/lib/pg.server";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -14,6 +15,8 @@ const ITEM_COLS =
   "sport_code,res_code,short_id,event_code,event_name,phase_name,unit_name,start_ist,start_time,status,status_desc,is_live,is_h2h,medal_flag,venue_name,location_name,has_india,india_entered,home,away,date_ist,date_jst,orgs";
 const RESULT_COLS =
   "sport_code,res_code,competitor_key,athlete_or_team,spoken_name,is_team,opponent_name,opponent_country_code,opponent_country_name,india_score,opponent_score,outcome,rank,result_mark,qualified,irm,medal,status,start_time,spoken_summary_en";
+const ITEM_COLS_LIST = ITEM_COLS.split(",");
+const RESULT_COLS_LIST = RESULT_COLS.split(",");
 
 /* ------------------------------ response cache ----------------------------- */
 
@@ -112,11 +115,10 @@ function attach(items: any[], results: any[]) {
   return items.map((i) => shapeItem(i, byKey.get(`${i.sport_code}|${i.res_code}`) ?? []));
 }
 
-async function resultsFor(admin: any, items: any[]) {
+async function resultsFor(sql: any, items: any[]) {
   const codes = items.map((i) => i.res_code);
   if (!codes.length) return [];
-  const { data } = await admin.from("india_results").select(RESULT_COLS).in("res_code", codes);
-  return data ?? [];
+  return await sql`SELECT ${sql(RESULT_COLS_LIST)} FROM india_results WHERE res_code IN ${sql(codes)}`;
 }
 
 /** Adds the sport name and the canonical readable path to shaped items. */
@@ -141,70 +143,61 @@ function pathOfRow(row: any, names: Map<string, string>) {
 
 /* --------------------------------- handlers -------------------------------- */
 
-async function sportsMap(admin: any) {
-  const { data } = await admin.from("sports").select("code,name");
-  return new Map<string, string>((data ?? []).map((s: any) => [s.code, s.name ?? s.code]));
+async function sportsMap(sql: any) {
+  const rows = await sql`SELECT code, name FROM sports`;
+  return new Map<string, string>(rows.map((s: any) => [s.code, s.name ?? s.code]));
 }
 
-async function asOf(admin: any) {
-  const { data } = await admin
-    .from("fetch_log")
-    .select("finished_at")
-    .eq("ok", true)
-    .not("finished_at", "is", null)
-    .order("finished_at", { ascending: false })
-    .limit(1);
-  return data?.[0]?.finished_at ?? null;
+async function asOf(sql: any) {
+  const rows = await sql`
+    SELECT finished_at FROM fetch_log
+    WHERE ok = true AND finished_at IS NOT NULL
+    ORDER BY finished_at DESC
+    LIMIT 1
+  `;
+  return rows[0]?.finished_at ?? null;
 }
 
-async function handleToday(admin: any, url: URL) {
+async function handleToday(sql: any, url: URL) {
   const zone = zoneOf(url);
   const date = param(url, "date") ?? zone.today;
   const nowIso = new Date().toISOString();
   const yesterday = new Date(Date.parse(`${date}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
-  const [names, stamp, standing, dayItems, futureItems] = await Promise.all([
-    sportsMap(admin),
-    asOf(admin),
-    admin
-      .from("medal_standings")
-      .select("gold,silver,bronze,total,rank")
-      .eq("org_code", "IND")
-      .maybeSingle(),
-    admin
-      .from("schedule_items")
-      .select(ITEM_COLS)
-      .eq("has_india", true)
-      .eq(zone.col, date)
-      .order("start_time", { ascending: true }),
-    admin
-      .from("schedule_items")
-      .select(ITEM_COLS)
-      .eq("has_india", true)
-      .gt("start_time", nowIso)
-      .order("start_time", { ascending: true })
-      .limit(120),
+  const [names, stamp, standingRows, rows, futureItemsRaw] = await Promise.all([
+    sportsMap(sql),
+    asOf(sql),
+    sql`SELECT gold, silver, bronze, total, rank FROM medal_standings WHERE org_code = 'IND' LIMIT 1`,
+    sql`
+      SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+      WHERE has_india = true AND ${sql(zone.col)} = ${date}
+      ORDER BY start_time ASC
+    `,
+    sql`
+      SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+      WHERE has_india = true AND start_time > ${nowIso}
+      ORDER BY start_time ASC
+      LIMIT 120
+    `,
   ]);
 
-  const rows = dayItems.data ?? [];
-  const futureRows = (futureItems.data ?? []).filter(
+  const futureRows = futureItemsRaw.filter(
     (row: any) => !FINISHED.includes(String(row.status ?? "").toUpperCase()) && !row.is_live,
   );
   const nextRows = futureRows.slice(0, 30);
-  const [results, nextResults] = await Promise.all([resultsFor(admin, rows), resultsFor(admin, nextRows)]);
+  const [results, nextResults] = await Promise.all([resultsFor(sql, rows), resultsFor(sql, nextRows)]);
   const items = named(attach(rows, results), names);
 
   const live = items.filter((i) => i.is_live);
   let finished = items.filter((i) => !i.is_live && i.is_finished);
   let resultsDay: "today" | "yesterday" = "today";
   if (!finished.length) {
-    const { data: yesterdayRows } = await admin
-      .from("schedule_items")
-      .select(ITEM_COLS)
-      .eq("has_india", true)
-      .eq(zone.col, yesterday)
-      .order("start_time", { ascending: true });
+    const yesterdayRows = await sql`
+      SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+      WHERE has_india = true AND ${sql(zone.col)} = ${yesterday}
+      ORDER BY start_time ASC
+    `;
     const yr = yesterdayRows ?? [];
-    finished = named(attach(yr, await resultsFor(admin, yr)), names).filter((i) => i.is_finished);
+    finished = named(attach(yr, await resultsFor(sql, yr)), names).filter((i) => i.is_finished);
     resultsDay = "yesterday";
   }
 
@@ -254,7 +247,7 @@ async function handleToday(admin: any, url: URL) {
   return {
     date,
     as_of: stamp,
-    medals: standing.data ?? { gold: 0, silver: 0, bronze: 0, total: 0, rank: null },
+    medals: standingRows[0] ?? { gold: 0, silver: 0, bronze: 0, total: 0, rank: null },
     counts: { live: live.length, next: next.length, results: finished.length },
     live,
     next,
@@ -268,53 +261,53 @@ async function handleToday(admin: any, url: URL) {
   };
 }
 
-async function handleDay(admin: any, url: URL) {
+async function handleDay(sql: any, url: URL) {
   const zone = zoneOf(url);
   const date = param(url, "date") ?? zone.today;
   const all = param(url, "all") === "1";
   const offset = Number(param(url, "offset") ?? 0);
-  let q = admin
-    .from("schedule_items")
-    .select(ITEM_COLS)
-    .eq(zone.col, date)
-    .order("start_time", { ascending: true });
-  if (!all) q = q.eq("has_india", true);
-  else q = q.range(offset, offset + 49);
 
-  const [names, { data }, counts, indiaCountRes] = await Promise.all([
-    sportsMap(admin),
-    q,
-    admin.from("schedule_items").select("has_india", { count: "exact", head: true }).eq(zone.col, date),
-    admin
-      .from("schedule_items")
-      .select("res_code", { count: "exact", head: true })
-      .eq(zone.col, date)
-      .eq("has_india", true),
+  const itemsQuery = all
+    ? sql`
+        SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+        WHERE ${sql(zone.col)} = ${date}
+        ORDER BY start_time ASC
+        LIMIT 50 OFFSET ${offset}
+      `
+    : sql`
+        SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+        WHERE ${sql(zone.col)} = ${date} AND has_india = true
+        ORDER BY start_time ASC
+      `;
+
+  const [names, rows, countRows, indiaCountRows] = await Promise.all([
+    sportsMap(sql),
+    itemsQuery,
+    sql`SELECT count(*)::int AS count FROM schedule_items WHERE ${sql(zone.col)} = ${date}`,
+    sql`SELECT count(*)::int AS count FROM schedule_items WHERE ${sql(zone.col)} = ${date} AND has_india = true`,
   ]);
-  const rows = data ?? [];
-  const results = await resultsFor(admin, rows.filter((r: any) => r.has_india));
+  const results = await resultsFor(sql, rows.filter((r: any) => r.has_india));
   const items = named(attach(rows, results), names);
-  const indiaCount = indiaCountRes.count;
-
+  const indiaCount = indiaCountRows[0]?.count;
 
   return {
     date,
     items,
     india_count: indiaCount ?? 0,
-    total_count: counts.count ?? 0,
+    total_count: countRows[0]?.count ?? 0,
     has_more: all && rows.length === 50,
   };
 }
 
-async function handleDays(admin: any, url: URL) {
+async function handleDays(sql: any, url: URL) {
   const zone = zoneOf(url);
-  const { data } = await admin
-    .from("schedule_items")
-    .select("date_ist,date_jst")
-    .eq("has_india", true)
-    .limit(20000);
+  const rows = await sql`
+    SELECT date_ist, date_jst FROM schedule_items
+    WHERE has_india = true
+    LIMIT 20000
+  `;
   const counts: Record<string, number> = {};
-  for (const r of data ?? []) {
+  for (const r of rows) {
     const key = r[zone.col];
     if (!key) continue;
     counts[key] = (counts[key] ?? 0) + 1;
@@ -322,30 +315,29 @@ async function handleDays(admin: any, url: URL) {
   return { counts };
 }
 
-async function handleSports(admin: any) {
+async function handleSports(sql: any) {
   const today = istToday();
   const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
-  const [names, entries, itemsRes, medalsRes] = await Promise.all([
-    sportsMap(admin),
-    admin.from("india_entries").select("sport_code,reg,name,spoken_name").limit(20000),
-    admin
-      .from("schedule_items")
-      .select("sport_code,start_ist,start_time,date_ist,is_live,status")
-      .eq("has_india", true)
-      .gte("date_ist", today)
-      .order("start_time", { ascending: true })
-      .limit(5000),
-    admin.from("india_medals").select("sport_code"),
+  const [names, entryRows, itemRows, medalRows] = await Promise.all([
+    sportsMap(sql),
+    sql`SELECT sport_code, reg, name, spoken_name FROM india_entries LIMIT 20000`,
+    sql`
+      SELECT sport_code, start_ist, start_time, date_ist, is_live, status FROM schedule_items
+      WHERE has_india = true AND date_ist >= ${today}
+      ORDER BY start_time ASC
+      LIMIT 5000
+    `,
+    sql`SELECT sport_code FROM india_medals`,
   ]);
 
   const athletes = new Map<string, Set<string>>();
-  for (const e of entries.data ?? []) {
+  for (const e of entryRows) {
     if (!athletes.has(e.sport_code)) athletes.set(e.sport_code, new Set());
     athletes.get(e.sport_code)!.add(e.reg);
   }
 
   const state = new Map<string, { live: boolean; today?: string; tomorrowStart?: string; tomorrow: boolean; doneToday: boolean; nextDate?: string }>();
-  for (const i of itemsRes.data ?? []) {
+  for (const i of itemRows) {
     const cur = state.get(i.sport_code) ?? { live: false, tomorrow: false, doneToday: false };
     const live = !!i.is_live || (i.status || "").toUpperCase() === "RUNNING";
     cur.live = cur.live || live;
@@ -361,7 +353,7 @@ async function handleSports(admin: any) {
     state.set(i.sport_code, cur);
   }
   const medalCounts = new Map<string, number>();
-  for (const medal of medalsRes.data ?? []) medalCounts.set(medal.sport_code, (medalCounts.get(medal.sport_code) ?? 0) + 1);
+  for (const medal of medalRows) medalCounts.set(medal.sport_code, (medalCounts.get(medal.sport_code) ?? 0) + 1);
 
   const list = [...athletes.keys()].map((code) => {
     const s = state.get(code);
@@ -392,10 +384,10 @@ async function handleSports(admin: any) {
   return { sports: list };
 }
 
-async function handleSport(admin: any, url: URL) {
+async function handleSport(sql: any, url: URL) {
   const raw = param(url, "code");
   if (!raw) return { error: "code required" };
-  const names = await sportsMap(admin);
+  const names = await sportsMap(sql);
   let code: string | null = names.has(raw) ? raw : null;
   if (!code) {
     const wanted = sportSlug(raw);
@@ -403,23 +395,21 @@ async function handleSport(admin: any, url: URL) {
   }
   if (!code) return { error: "sport not found" };
   const sportCode = code;
-  const [itemsRes, squad] = await Promise.all([
-    admin
-      .from("schedule_items")
-      .select(ITEM_COLS)
-      .eq("has_india", true)
-      .eq("sport_code", sportCode)
-      .order("start_time", { ascending: true }),
-    admin
-      .from("india_entries")
-      .select("reg,name,spoken_name,gender,event_name,type")
-      .eq("sport_code", sportCode)
-      .limit(2000),
+  const [rows, squadRows] = await Promise.all([
+    sql`
+      SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+      WHERE has_india = true AND sport_code = ${sportCode}
+      ORDER BY start_time ASC
+    `,
+    sql`
+      SELECT reg, name, spoken_name, gender, event_name, type FROM india_entries
+      WHERE sport_code = ${sportCode}
+      LIMIT 2000
+    `,
   ]);
-  const rows = itemsRes.data ?? [];
-  const items = named(attach(rows, await resultsFor(admin, rows)), names);
+  const items = named(attach(rows, await resultsFor(sql, rows)), names);
   const regs = new Map<string, any>();
-  for (const e of squad.data ?? []) if (!regs.has(e.reg)) regs.set(e.reg, e);
+  for (const e of squadRows) if (!regs.has(e.reg)) regs.set(e.reg, e);
   const name = names.get(sportCode) ?? sportCode;
 
   return {
@@ -434,25 +424,26 @@ async function handleSport(admin: any, url: URL) {
   };
 }
 
-async function handleMatch(admin: any, url: URL) {
+async function handleMatch(sql: any, url: URL) {
   const id = param(url, "id");
   const sport = param(url, "sport");
   const res = param(url, "res");
   if (!id && (!sport || !res)) return { error: "id or sport and res required" };
 
-  let rowQuery = admin.from("schedule_items").select(`${ITEM_COLS},raw,updated_at`);
-  rowQuery = id
-    ? rowQuery.eq("short_id", Number(id))
-    : rowQuery.eq("sport_code", sport).eq("res_code", res);
-  const [names, itemRes] = await Promise.all([sportsMap(admin), rowQuery.maybeSingle()]);
-  if (!itemRes.data) return { error: "not found" };
-  const row = itemRes.data;
+  const matchCols = [...ITEM_COLS_LIST, "raw", "updated_at"];
+  const [names, rowResult] = await Promise.all([
+    sportsMap(sql),
+    id
+      ? sql`SELECT ${sql(matchCols)} FROM schedule_items WHERE short_id = ${Number(id)} LIMIT 1`
+      : sql`SELECT ${sql(matchCols)} FROM schedule_items WHERE sport_code = ${sport} AND res_code = ${res} LIMIT 1`,
+  ]);
+  const row = rowResult[0];
+  if (!row) return { error: "not found" };
   const sportCode = row.sport_code;
-  const { data: resultRows } = await admin
-    .from("india_results")
-    .select(RESULT_COLS)
-    .eq("sport_code", sportCode)
-    .eq("res_code", row.res_code);
+  const resultRows = await sql`
+    SELECT ${sql(RESULT_COLS_LIST)} FROM india_results
+    WHERE sport_code = ${sportCode} AND res_code = ${row.res_code}
+  `;
 
   const raw = (row.raw ?? {}) as any;
   const sportName = names.get(sportCode) ?? sportCode;
@@ -465,49 +456,55 @@ async function handleMatch(admin: any, url: URL) {
     result_raw: raw?.result ?? null,
   };
 
-  let nextQuery = admin
-    .from("schedule_items")
-    .select(ITEM_COLS)
-    .eq("has_india", true)
-    .eq("sport_code", sportCode)
-    .gt("start_time", new Date().toISOString());
-  if (row.event_code) nextQuery = nextQuery.eq("event_code", row.event_code);
-  const { data: nextRows } = await nextQuery.order("start_time", { ascending: true }).limit(3);
+  const nowIso = new Date().toISOString();
+  const nextRows = row.event_code
+    ? await sql`
+        SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+        WHERE has_india = true AND sport_code = ${sportCode} AND start_time > ${nowIso} AND event_code = ${row.event_code}
+        ORDER BY start_time ASC
+        LIMIT 3
+      `
+    : await sql`
+        SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+        WHERE has_india = true AND sport_code = ${sportCode} AND start_time > ${nowIso}
+        ORDER BY start_time ASC
+        LIMIT 3
+      `;
 
   return { item, next: named(attach(nextRows ?? [], []), names) };
 }
 
-async function handleMedals(admin: any) {
-  const [standings, medals, stamp] = await Promise.all([
-    admin
-      .from("medal_standings")
-      .select("org_code,org_name,rank,gold,silver,bronze,total")
-      .order("total", { ascending: false })
-      .limit(100),
-    admin
-      .from("india_medals")
-      .select(
-        "sport_code,sport_name,event_code,event_name,competitor_key,reg,medal,athlete_or_team,spoken_name,members,members_spoken,date_ist,won_at,res_code",
-      )
-      .order("won_at", { ascending: false }),
-    asOf(admin),
+async function handleMedals(sql: any) {
+  const [standingsRows, medalRows, stamp] = await Promise.all([
+    sql`
+      SELECT org_code, org_name, rank, gold, silver, bronze, total FROM medal_standings
+      ORDER BY total DESC
+      LIMIT 100
+    `,
+    sql`
+      SELECT sport_code, sport_name, event_code, event_name, competitor_key, reg, medal, athlete_or_team,
+        spoken_name, members, members_spoken, date_ist, won_at, res_code
+      FROM india_medals
+      ORDER BY won_at DESC
+    `,
+    asOf(sql),
   ]);
-  const rows = (standings.data ?? []).slice().sort((a: any, b: any) => {
+  const rows = standingsRows.slice().sort((a: any, b: any) => {
     const ra = Number(a.rank ?? 999);
     const rb = Number(b.rank ?? 999);
     if (ra !== rb) return ra - rb;
     return b.gold - a.gold;
   });
 
-  const medalRows = medals.data ?? [];
   const resCodes = medalRows.map((m: any) => m.res_code).filter(Boolean);
   const pathByRes = new Map<string, string | null>();
   if (resCodes.length) {
-    const names = await sportsMap(admin);
-    const { data: items } = await admin
-      .from("schedule_items")
-      .select("sport_code,res_code,short_id,event_name,phase_name,unit_name,is_h2h,home,away")
-      .in("res_code", resCodes);
+    const names = await sportsMap(sql);
+    const items = await sql`
+      SELECT sport_code, res_code, short_id, event_name, phase_name, unit_name, is_h2h, home, away
+      FROM schedule_items
+      WHERE res_code IN ${sql(resCodes)}
+    `;
     for (const row of items ?? []) pathByRes.set(row.res_code, pathOfRow(row, names));
   }
 
@@ -523,48 +520,52 @@ async function handleMedals(admin: any) {
   };
 }
 
-async function handleAthlete(admin: any, url: URL) {
+async function handleAthlete(sql: any, url: URL) {
   const reg = param(url, "reg");
   if (!reg) return { error: "reg required" };
-  const [entries, names] = await Promise.all([
-    admin
-      .from("india_entries")
-      .select("sport_code,sport_name,reg,name,spoken_name,gender,event_code,event_name,type")
-      .eq("reg", reg),
-    sportsMap(admin),
+  const [entryRows, names] = await Promise.all([
+    sql`
+      SELECT sport_code, sport_name, reg, name, spoken_name, gender, event_code, event_name, type
+      FROM india_entries
+      WHERE reg = ${reg}
+    `,
+    sportsMap(sql),
   ]);
-  const rows = entries.data ?? [];
+  const rows = entryRows ?? [];
   if (!rows.length) return { error: "not found" };
   const name = rows[0].spoken_name || rows[0].name || reg;
   const sportCode = rows[0].sport_code;
 
   const [directResults, allMedals, eventItems] = await Promise.all([
-    admin
-      .from("india_results")
-      .select(RESULT_COLS)
-      .eq("competitor_key", reg)
-      .order("start_time", { ascending: false })
-      .limit(50),
-    admin
-      .from("india_medals")
-      .select("sport_code,sport_name,event_code,event_name,reg,medal,members,members_spoken,date_ist,spoken_name"),
-    admin
-      .from("schedule_items")
-      .select(ITEM_COLS)
-      .eq("has_india", true)
-      .eq("sport_code", sportCode)
-      .order("start_time", { ascending: true })
-      .limit(500),
+    sql`
+      SELECT ${sql(RESULT_COLS_LIST)} FROM india_results
+      WHERE competitor_key = ${reg}
+      ORDER BY start_time DESC
+      LIMIT 50
+    `,
+    sql`
+      SELECT sport_code, sport_name, event_code, event_name, reg, medal, members, members_spoken, date_ist, spoken_name
+      FROM india_medals
+    `,
+    sql`
+      SELECT ${sql(ITEM_COLS_LIST)} FROM schedule_items
+      WHERE has_india = true AND sport_code = ${sportCode}
+      ORDER BY start_time ASC
+      LIMIT 500
+    `,
   ]);
 
   const eventCodes = new Set(rows.map((r: any) => r.event_code));
-  const matchingItems = (eventItems.data ?? []).filter((i: any) => eventCodes.has(i.event_code));
+  const matchingItems = (eventItems ?? []).filter((i: any) => eventCodes.has(i.event_code));
   const teamResCodes = matchingItems.map((i: any) => i.res_code);
-  const { data: teamResults } = teamResCodes.length
-    ? await admin.from("india_results").select(RESULT_COLS).in("res_code", teamResCodes).eq("is_team", true)
-    : { data: [] };
+  const teamResults = teamResCodes.length
+    ? await sql`
+        SELECT ${sql(RESULT_COLS_LIST)} FROM india_results
+        WHERE res_code IN ${sql(teamResCodes)} AND is_team = true
+      `
+    : [];
   const itemByResult = new Map(matchingItems.map((i: any) => [i.res_code, i]));
-  const mergedResults = [...(directResults.data ?? []), ...(teamResults ?? [])]
+  const mergedResults = [...(directResults ?? []), ...(teamResults ?? [])]
     .filter((r: any, index: number, all: any[]) => all.findIndex((x) => x.sport_code === r.sport_code && x.res_code === r.res_code && x.competitor_key === r.competitor_key) === index)
     .map((r: any) => {
       const item = itemByResult.get(r.res_code) as any;
@@ -577,7 +578,7 @@ async function handleAthlete(admin: any, url: URL) {
     if (String(value.Reg ?? value.reg ?? "") === reg) return true;
     return Object.values(value).some(memberMatches);
   };
-  const medals = (allMedals.data ?? []).filter((m: any) => m.reg === reg || memberMatches(m.members));
+  const medals = (allMedals ?? []).filter((m: any) => m.reg === reg || memberMatches(m.members));
   const upcoming = named(
     attach(
       matchingItems.filter((i: any) => i.start_time && i.start_time > new Date().toISOString()),
@@ -621,17 +622,18 @@ async function handleAthlete(admin: any, url: URL) {
   };
 }
 
-async function handleSearch(admin: any) {
-  const [names, entries] = await Promise.all([
-    sportsMap(admin),
-    admin
-      .from("india_entries")
-      .select("reg,name,spoken_name,sport_code,event_code,event_name,type")
-      .limit(20000),
+async function handleSearch(sql: any) {
+  const [names, entryRows] = await Promise.all([
+    sportsMap(sql),
+    sql`
+      SELECT reg, name, spoken_name, sport_code, event_code, event_name, type
+      FROM india_entries
+      LIMIT 20000
+    `,
   ]);
   const byReg = new Map<string, any>();
   const eventMap = new Map<string, any>();
-  for (const e of entries.data ?? []) {
+  for (const e of entryRows) {
     const prev = byReg.get(e.reg);
     if (prev) prev.events += 1;
     else
@@ -673,7 +675,7 @@ export const Route = createFileRoute("/api/public/app/$")({
         const started = Date.now();
         const url = new URL(request.url);
         const endpoint = String((params as any)._splat ?? "").replace(/^\/+|\/+$/g, "");
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const sql = getSql();
         const cacheable: Record<string, number> = { today: 20000, sports: 20000, day: 20000, days: 20000, search: 60000 };
         const cacheKey = `${endpoint}?${url.searchParams.toString()}`;
         try {
@@ -682,31 +684,31 @@ export const Route = createFileRoute("/api/public/app/$")({
           if (!data)
           switch (endpoint) {
             case "today":
-              data = await handleToday(supabaseAdmin, url);
+              data = await handleToday(sql, url);
               break;
             case "day":
-              data = await handleDay(supabaseAdmin, url);
+              data = await handleDay(sql, url);
               break;
             case "days":
-              data = await handleDays(supabaseAdmin, url);
+              data = await handleDays(sql, url);
               break;
             case "sports":
-              data = await handleSports(supabaseAdmin);
+              data = await handleSports(sql);
               break;
             case "sport":
-              data = await handleSport(supabaseAdmin, url);
+              data = await handleSport(sql, url);
               break;
             case "match":
-              data = await handleMatch(supabaseAdmin, url);
+              data = await handleMatch(sql, url);
               break;
             case "medals":
-              data = await handleMedals(supabaseAdmin);
+              data = await handleMedals(sql);
               break;
             case "athlete":
-              data = await handleAthlete(supabaseAdmin, url);
+              data = await handleAthlete(sql, url);
               break;
             case "search":
-              data = await handleSearch(supabaseAdmin);
+              data = await handleSearch(sql);
               break;
             default:
               return Response.json(

@@ -1,25 +1,36 @@
-# Welcome to your Lovable project
+# Cheer4Bharat
 
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+Asian Games 2026 results tracker, focused on India's results, medals and schedule.
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Requires Node.js 22 and npm.
 
 ```sh
 git clone <this-repository-url>
-cd <repository-name>
-npm i
+cd asian-games
+npm install
+cp .env.example .env   # fill in DATABASE_URL and the app's secret keys
 npm run dev
 ```
+
+The ingest scheduler (`src/worker`) runs as a separate process — see
+`npm run worker` / `npm run worker:dev`.
+
+## Database
+
+Schema and migrations live in `drizzle/`, managed with `drizzle-kit`:
+
+```sh
+npm run db:generate   # after changing drizzle/schema.ts
+npm run db:migrate    # apply pending migrations to DATABASE_URL
+```
+
+## Deployment
+
+Hosted on AWS — see [`docs/AWS_MIGRATION.md`](docs/AWS_MIGRATION.md) for the
+target architecture and [`infra/README.md`](infra/README.md) for the
+Terraform + systemd + GitHub Actions setup that provisions and deploys it.
 
 ## Built with
 
@@ -27,3 +38,4 @@ npm run dev
 - TypeScript
 - React
 - Tailwind CSS
+- Drizzle ORM + PostgreSQL

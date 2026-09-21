@@ -1,0 +1,29 @@
+[Unit]
+Description=Cheer4Bharat web (TanStack Start / Nitro node-server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cheer4bharat
+Group=cheer4bharat
+WorkingDirectory=/opt/cheer4bharat/current
+EnvironmentFile=/etc/cheer4bharat/env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOST=0.0.0.0
+ExecStart=/usr/bin/node .output/server/index.mjs
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cheer4bharat-web
+
+# Least-privilege hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/cheer4bharat
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
